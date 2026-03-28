@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 
 import { ChatMessage } from "../../components/ChatMessage";
+import { ThemeToggle } from "../../components/ThemeToggle";
 import { useChat } from "../../hooks/useChat";
 import { usePortfolio } from "../../hooks/usePortfolio";
+import { useTheme } from "../../hooks/useTheme";
 import { stripForVoice, useVoice } from "../../hooks/useVoice";
 import type { UserMode } from "../../types";
 
@@ -47,7 +49,7 @@ type SidebarSignal = {
 };
 
 function formatRupee(value: number, fractionDigits = 0): string {
-  return `\u20B9${value.toLocaleString("en-IN", { maximumFractionDigits: fractionDigits })}`;
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: fractionDigits })}`;
 }
 
 function signedPercent(value: number): string {
@@ -122,7 +124,7 @@ function SidebarPanel({
         </p>
       </div>
 
-      <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
+      <div className="hide-scrollbar mt-5 min-h-0 flex-1 overflow-y-auto">
         <section>
           <h3>Portfolio</h3>
           <div className="mt-2">
@@ -188,7 +190,7 @@ function SidebarPanel({
         </section>
       </div>
 
-      <div className="mt-4 border border-[var(--border-default)] rounded-[var(--radius-md)] p-1">
+      <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] p-1">
         <div className="grid grid-cols-2 gap-1">
           <button
             type="button"
@@ -230,6 +232,7 @@ function ChatPageContent(): React.JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile, isOnboarded, isReady, saveProfile } = usePortfolio();
+  const { theme, isReady: isThemeReady, toggleTheme } = useTheme();
   const { messages, isLoading, currentSteps, sendMessage, clearChat } = useChat();
   const { speak, stop, isSpeaking } = useVoice();
 
@@ -565,20 +568,23 @@ function ChatPageContent(): React.JSX.Element {
 
         <section className="relative flex min-h-0 flex-1 flex-col bg-[var(--bg-primary)]">
           <header className="flex h-[52px] items-center justify-between border-b border-[var(--border-subtle)] px-4 md:px-6">
-            <p className="mono text-[13px] text-[var(--text-secondary)]">{contextLabel}</p>
-            <button
-              type="button"
-              onClick={() => {
-                clearChat();
-                stop();
-              }}
-              className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
-            >
-              New chat
-            </button>
+            <p className="mono max-w-[56%] truncate text-[13px] text-[var(--text-secondary)]">{contextLabel}</p>
+            <div className="flex items-center gap-2">
+              {isThemeReady ? <ThemeToggle theme={theme} onToggle={toggleTheme} /> : null}
+              <button
+                type="button"
+                onClick={() => {
+                  clearChat();
+                  stop();
+                }}
+                className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+              >
+                New chat
+              </button>
+            </div>
           </header>
 
-          <div ref={messagesViewportRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={messagesViewportRef} className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-[720px] px-6 py-6">
               {messages.length === 0 ? (
                 <div className="fade-in flex min-h-[58vh] flex-col items-center justify-center text-center">

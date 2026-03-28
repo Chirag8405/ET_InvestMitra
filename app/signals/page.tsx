@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { ThemeToggle } from "../../components/ThemeToggle";
+import { useTheme } from "../../hooks/useTheme";
+
 const TICKERS = [
   "RELIANCE",
   "HDFCBANK",
@@ -89,6 +92,7 @@ function TableSkeleton(): React.JSX.Element {
 
 export default function SignalsPage(): React.JSX.Element {
   const router = useRouter();
+  const { theme, isReady: isThemeReady, toggleTheme } = useTheme();
   const [rows, setRows] = useState<SignalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -169,12 +173,15 @@ export default function SignalsPage(): React.JSX.Element {
               NSE — updated {updatedAt || "--:--"}
             </p>
           </div>
-          <Link
-            href="/chat"
-            className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
-          >
-            Back to chat
-          </Link>
+          <div className="flex items-center gap-2">
+            {isThemeReady ? <ThemeToggle theme={theme} onToggle={toggleTheme} /> : null}
+            <Link
+              href="/chat"
+              className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+            >
+              Back to chat
+            </Link>
+          </div>
         </div>
 
         {inlineError && (
@@ -183,7 +190,7 @@ export default function SignalsPage(): React.JSX.Element {
       </div>
 
       <div className="px-4 pb-8 pt-6 md:px-12">
-        <div className="overflow-auto">
+        <div className="hide-scrollbar overflow-auto">
           <table className="w-full min-w-[880px] border-collapse">
             <thead className="sticky top-0 bg-[var(--bg-primary)]">
               <tr className="border-b-2 border-[var(--border-default)]">

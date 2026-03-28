@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useRouter } from "next/navigation";
 
+import { ThemeToggle } from "../components/ThemeToggle";
 import { usePortfolio } from "../hooks/usePortfolio";
+import { useTheme } from "../hooks/useTheme";
 import type { Holding, RiskProfile, UserMode, UserProfile } from "../types";
 
 const AGE_OPTIONS: Array<{ value: UserProfile["ageGroup"]; label: string; description: string }> = [
@@ -70,6 +72,10 @@ function modeLabel(mode: UserMode): string {
   return mode === "analyst" ? "Analyst mode" : "Simple mode";
 }
 
+function formatRupee(value: number): string {
+  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
 function OptionButton({
   selected,
   label,
@@ -102,6 +108,7 @@ function OptionButton({
 export default function Home(): JSX.Element {
   const router = useRouter();
   const { isOnboarded, isReady, saveProfile } = usePortfolio();
+  const { theme, isReady: isThemeReady, toggleTheme } = useTheme();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [previousStep, setPreviousStep] = useState<1 | 2 | 3 | null>(null);
@@ -313,7 +320,7 @@ export default function Home(): JSX.Element {
             Optional, but this unlocks portfolio-aware analysis immediately.
           </p>
 
-          <div className="overflow-x-auto">
+          <div className="hide-scrollbar overflow-x-auto">
             <table className="w-full min-w-[620px] border-collapse">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] text-left">
@@ -425,7 +432,7 @@ export default function Home(): JSX.Element {
             Holdings tracked: <span className="mono text-[var(--text-primary)]">{summary.holdingCount}</span>
           </p>
           <p className="text-[14px] text-[var(--text-secondary)]">
-            Total invested: <span className="mono text-[var(--text-primary)]">\u20B9{summary.totalInvested.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+            Total invested: <span className="mono text-[var(--text-primary)]">{formatRupee(summary.totalInvested)}</span>
           </p>
           <p className="text-[14px] text-[var(--text-secondary)]">
             Top sector: <span className="mono text-[var(--text-primary)]">{Math.round(summary.topSectorPercent)}% {summary.topSector}</span>
@@ -457,7 +464,10 @@ export default function Home(): JSX.Element {
 
   return (
     <main className="min-h-screen bg-[var(--bg-primary)] px-4 py-8 text-[var(--text-primary)]">
-      <div className="mx-auto flex min-h-[calc(100vh-64px)] w-full max-w-[480px] items-center">
+      <div className="mx-auto flex w-full max-w-[560px] justify-end pb-2">
+        {isThemeReady ? <ThemeToggle theme={theme} onToggle={toggleTheme} /> : null}
+      </div>
+      <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-[480px] items-center">
         <div className="w-full">
           <div className="mb-6 flex items-center justify-center gap-2">
             {[1, 2, 3].map((dot) => (

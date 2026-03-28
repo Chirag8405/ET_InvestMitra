@@ -227,7 +227,7 @@ export function ChatMessage({
         <div className="leading-6" dangerouslySetInnerHTML={{ __html: mainHtml }} />
 
         {message.citations && message.citations.length > 0 && (
-          <div className="mt-3 overflow-x-auto pb-1">
+          <div className="hide-scrollbar mt-3 overflow-x-auto pb-1">
             <div className="flex w-max gap-2 whitespace-nowrap">
               {message.citations.map((citation, idx) => (
                 <SourceBadge key={`${citation.label}-${idx}`} citation={citation} />
