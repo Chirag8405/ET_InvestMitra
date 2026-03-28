@@ -110,14 +110,14 @@ Quick validation:
 +--------------------------------------+--------------------------------+-------------------+
                                        |                                |
                                        v                                v
-+------------------------------------------------------+  +-----------------------------------+
-| LLM PROVIDERS                                        |  | DATA SOURCES (FREE)               |
-|                                                      |  |                                   |
-| Groq: qwen/qwen3-32b (primary)                       |  | NSE: nseindia.com APIs            |
-| Anthropic: claude-sonnet-4-20250514 (fallback)       |  | yfinance: Python fallback         |
-| Mock SSE response when no API key is configured      |  | Screener.in public pages          |
-|                                                      |  | ET Markets RSS                    |
-+------------------------------------------------------+  +-----------------------------------+
++------------------------------------------------------+  +---------------------------------+
+| LLM PROVIDERS                                        |  | DATA SOURCES (FREE)             |
+|                                                      |  |                                 |
+| Groq: qwen/qwen3-32b (primary)                       |  | NSE: nseindia.com APIs          |
+| Anthropic: claude-sonnet-4-20250514 (fallback)       |  | yfinance: Python fallback       |
+| Mock SSE response when no API key is configured      |  | Screener.in public pages        |
+|                                                      |  | ET Markets RSS                  |
++------------------------------------------------------+  +---------------------------------+
 ```
 
 ### Frontend (App Router)
