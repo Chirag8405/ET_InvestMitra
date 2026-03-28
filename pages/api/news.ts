@@ -7,6 +7,8 @@ type NewsResponse = {
 
 const ET_RSS_URL = "https://economictimes.indiatimes.com/markets/stocks/rss.cms";
 const LOOKBACK_MS = 48 * 60 * 60 * 1000;
+const NEWS_CACHE_TTL_MS = 45 * 60 * 1000;
+const newsCache = new Map<string, { data: NewsResponse; expiresAt: number }>();
 
 const TICKER_TO_COMPANY: Record<string, string> = {
   RELIANCE: "Reliance",
@@ -78,6 +80,23 @@ function isRecent(pubDate: string): boolean {
   return Date.now() - time <= LOOKBACK_MS;
 }
 
+function getCachedNews(cacheKey: string): NewsResponse | null {
+  const cached = newsCache.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    newsCache.delete(cacheKey);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedNews(cacheKey: string, data: NewsResponse): void {
+  newsCache.set(cacheKey, {
+    data,
+    expiresAt: Date.now() + NEWS_CACHE_TTL_MS,
+  });
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<NewsResponse | { error: string }>
@@ -90,6 +109,13 @@ export default async function handler(
 
   const ticker = safeTicker((req.query.ticker || "").toString());
   const companyName = ticker ? TICKER_TO_COMPANY[ticker] : "";
+  const cacheKey = ticker || "GENERAL";
+
+  const cached = getCachedNews(cacheKey);
+  if (cached) {
+    res.status(200).json(cached);
+    return;
+  }
 
   try {
     const response = await fetch(ET_RSS_URL, {
@@ -115,10 +141,13 @@ export default async function handler(
       .map((item) => item.title)
       .slice(0, 5);
 
-    res.status(200).json({
+    const payload: NewsResponse = {
       headlines: selected,
       fetchedAt: new Date().toISOString(),
-    });
+    };
+
+    setCachedNews(cacheKey, payload);
+    res.status(200).json(payload);
   } catch {
     res.status(502).json({ error: "Unable to fetch news signals" });
   }

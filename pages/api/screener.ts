@@ -4,6 +4,9 @@ import * as cheerio from "cheerio";
 
 import type { Fundamentals } from "../../types";
 
+const FUNDAMENTALS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const fundamentalsCache = new Map<string, { data: Fundamentals; expiresAt: number }>();
+
 function toNumberOrNull(value: string | undefined): number | null {
   if (!value) return null;
   const cleaned = value.replace(/,/g, "").replace(/%/g, "").trim();
@@ -37,6 +40,23 @@ function extractHoldingPercent($: cheerio.CheerioAPI, label: string): number | n
   return null;
 }
 
+function getCachedFundamentals(ticker: string): Fundamentals | null {
+  const cached = fundamentalsCache.get(ticker);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    fundamentalsCache.delete(ticker);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedFundamentals(ticker: string, data: Fundamentals): void {
+  fundamentalsCache.set(ticker, {
+    data,
+    expiresAt: Date.now() + FUNDAMENTALS_CACHE_TTL_MS,
+  });
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Fundamentals | { error: string; details?: string }>
@@ -52,6 +72,12 @@ export default async function handler(
 
   if (!ticker) {
     res.status(400).json({ error: "Missing or invalid ticker" });
+    return;
+  }
+
+  const cached = getCachedFundamentals(ticker);
+  if (cached) {
+    res.status(200).json(cached);
     return;
   }
 
@@ -93,6 +119,8 @@ export default async function handler(
       fetchedAt: new Date().toISOString(),
       source: "screener.in",
     };
+
+    setCachedFundamentals(ticker, result);
 
     res.status(200).json(result);
   } catch (error) {

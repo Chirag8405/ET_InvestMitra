@@ -110,7 +110,7 @@ function buildMarketSection(stockData: StockData[]): {
       const sourceLabel = s.source === "NSE" ? "NSE" : "yfinance";
       return [
         `${s.ticker}: ${rupee}${formatNumber(s.price)} | ${changeSign}${s.changePercent.toFixed(2)}% today | 52w: ${rupee}${formatNumber(s.low52w, 0)}-${rupee}${formatNumber(s.high52w, 0)}`,
-        `[Source: ${sourceLabel} | ${new Date(s.fetchedAt).toLocaleTimeString("en-IN")}]`,
+        `[Source: ${sourceLabel} | Confidence: ${s.confidence} | ${new Date(s.fetchedAt).toLocaleTimeString("en-IN")}]`,
       ];
     }),
     citations: stockData.map((s) => ({

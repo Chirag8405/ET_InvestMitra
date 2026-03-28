@@ -8,6 +8,8 @@ import type { StockData } from "../../types";
 const execAsync = promisify(exec);
 
 let nseSession: { cookie: string; expiresAt: number } | null = null;
+const STOCK_CACHE_TTL_MS = 10 * 1000;
+const stockCache = new Map<string, { data: StockData; expiresAt: number }>();
 
 const NSE_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -67,6 +69,7 @@ async function fetchFromNSEIndices(ticker: string): Promise<StockData> {
     volume: 0,
     fetchedAt: new Date().toISOString(),
     source: "NSE",
+    confidence: "high",
   };
 }
 
@@ -97,6 +100,7 @@ async function fetchFromNSE(ticker: string): Promise<StockData> {
     volume: toNumber(priceInfo?.totalTradedVolume),
     fetchedAt: new Date().toISOString(),
     source: "NSE",
+    confidence: "high",
   };
 }
 
@@ -136,7 +140,25 @@ async function fetchFromYFinance(ticker: string): Promise<StockData> {
     volume: toNumber(parsed?.volume),
     fetchedAt: new Date().toISOString(),
     source: "yfinance",
+    confidence: "medium",
   };
+}
+
+function getCachedStock(ticker: string): StockData | null {
+  const cached = stockCache.get(ticker);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    stockCache.delete(ticker);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedStock(ticker: string, data: StockData): void {
+  stockCache.set(ticker, {
+    data,
+    expiresAt: Date.now() + STOCK_CACHE_TTL_MS,
+  });
 }
 
 async function getNseCookie(): Promise<string> {
@@ -174,19 +196,33 @@ export default async function handler(
     return;
   }
 
+  const cached = getCachedStock(ticker);
+  if (cached) {
+    res.status(200).json(cached);
+    return;
+  }
+
   try {
     const data = isNiftyTicker(ticker)
       ? await fetchFromNSEIndices(ticker)
       : await fetchFromNSE(ticker);
+    setCachedStock(ticker, data);
     res.status(200).json(data);
     return;
   } catch (nseError) {
     try {
       const data = await fetchFromYFinance(ticker);
+      setCachedStock(ticker, data);
       res.status(200).json(data);
       return;
-    } catch {
-      res.status(503).json({ error: "Stock data unavailable" });
+    } catch (yfinanceError) {
+      const nseDetails = nseError instanceof Error ? nseError.message : "NSE request failed";
+      const yfinanceDetails =
+        yfinanceError instanceof Error ? yfinanceError.message : "yfinance request failed";
+      res.status(503).json({
+        error: "Stock data unavailable",
+        details: `NSE failed: ${nseDetails}; yfinance failed: ${yfinanceDetails}`,
+      });
     }
   }
 }

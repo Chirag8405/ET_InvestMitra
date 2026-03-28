@@ -33,6 +33,7 @@ export interface StockData {
   volume: number;
   fetchedAt: string;      // ISO timestamp
   source: 'NSE' | 'yfinance';
+  confidence: 'high' | 'medium' | 'low';
 }
 
 
