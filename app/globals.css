@@ -164,6 +164,7 @@
     color: var(--text-tertiary);
     text-transform: uppercase;
     line-height: 1.2;
+    overflow-wrap: anywhere;
   }
 
   .im-body-paragraph {
@@ -171,6 +172,7 @@
     font-size: 15px;
     line-height: 1.65;
     color: var(--text-primary);
+    overflow-wrap: anywhere;
   }
 
   .im-tooltip {
@@ -223,6 +225,26 @@
 
   .step-exit {
     animation: stepOut 250ms ease forwards;
+  }
+
+  .gentle-enter {
+    animation: gentleEnter 260ms ease both;
+  }
+
+  .gentle-enter-delayed {
+    animation: gentleEnter 340ms ease both;
+  }
+
+  .row-fade-in {
+    animation: rowFadeIn 220ms ease both;
+  }
+
+  .overlay-fade-in {
+    animation: overlayFadeIn 180ms ease both;
+  }
+
+  .drawer-slide-up {
+    animation: drawerSlideUp 220ms ease both;
   }
 
   .hide-scrollbar {
@@ -295,5 +317,56 @@
   to {
     opacity: 0;
     transform: translate3d(-100%, 0, 0);
+  }
+}
+
+@keyframes gentleEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rowFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drawerSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

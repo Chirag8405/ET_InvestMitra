@@ -91,7 +91,7 @@ function OptionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-[var(--radius-md)] border px-4 py-3 text-left transition-colors duration-100 ${
+      className={`w-full rounded-[var(--radius-md)] border px-4 py-3 text-left transition-[background-color,border-color,color] duration-150 ${
         selected
           ? "border-[var(--text-primary)] bg-[var(--bg-secondary)]"
           : "border-[var(--border-default)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]"
@@ -320,7 +320,81 @@ export default function Home(): JSX.Element {
             Optional, but this unlocks portfolio-aware analysis immediately.
           </p>
 
-          <div className="hide-scrollbar overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {holdings.map((holding, index) => (
+              <div
+                key={index}
+                className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="mono text-[12px] text-[var(--text-tertiary)]">Holding {index + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHoldings((prev) =>
+                        prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                      )
+                    }
+                    disabled={holdings.length === 1}
+                    className="text-[12px] text-[var(--text-tertiary)] transition-colors duration-100 hover:text-[var(--accent-negative)] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Delete holding card"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <label className="text-[12px] text-[var(--text-tertiary)]">
+                    Ticker
+                    <input
+                      value={holding.ticker}
+                      onChange={(event) => updateHolding(index, { ticker: event.target.value })}
+                      placeholder="RELIANCE"
+                      className="mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                    />
+                  </label>
+
+                  <label className="text-[12px] text-[var(--text-tertiary)]">
+                    Quantity
+                    <input
+                      type="number"
+                      min={0}
+                      value={holding.quantity || ""}
+                      onChange={(event) =>
+                        updateHolding(index, { quantity: Number(event.target.value) || 0 })
+                      }
+                      className="mono mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                    />
+                  </label>
+
+                  <label className="text-[12px] text-[var(--text-tertiary)]">
+                    Avg Buy
+                    <input
+                      type="number"
+                      min={0}
+                      value={holding.avgBuyPrice || ""}
+                      onChange={(event) =>
+                        updateHolding(index, { avgBuyPrice: Number(event.target.value) || 0 })
+                      }
+                      className="mono mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                    />
+                  </label>
+
+                  <label className="text-[12px] text-[var(--text-tertiary)]">
+                    Sector
+                    <input
+                      value={holding.sector}
+                      onChange={(event) => updateHolding(index, { sector: event.target.value })}
+                      placeholder="Banking"
+                      className="mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hide-scrollbar hidden overflow-x-auto md:block">
             <table className="w-full min-w-[620px] border-collapse">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] text-left">
@@ -380,7 +454,7 @@ export default function Home(): JSX.Element {
                             prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
                           )
                         }
-                        className="text-[13px] text-[var(--text-tertiary)] opacity-0 transition-colors duration-100 group-hover:opacity-100 hover:text-[var(--accent-negative)]"
+                        className="text-[13px] text-[var(--text-tertiary)] opacity-100 transition-colors duration-100 hover:text-[var(--accent-negative)] lg:opacity-0 lg:group-hover:opacity-100"
                         aria-label="Delete holding row"
                       >
                         ×
@@ -463,11 +537,11 @@ export default function Home(): JSX.Element {
   };
 
   return (
-    <main className="min-h-screen bg-[var(--bg-primary)] px-4 py-8 text-[var(--text-primary)]">
-      <div className="mx-auto flex w-full max-w-[560px] justify-end pb-2">
+    <main className="min-h-screen overflow-x-hidden bg-[var(--bg-primary)] px-3 py-6 text-[var(--text-primary)] sm:px-4 sm:py-8">
+      <div className="gentle-enter mx-auto flex w-full max-w-[720px] justify-end pb-2">
         {isThemeReady ? <ThemeToggle theme={theme} onToggle={toggleTheme} /> : null}
       </div>
-      <div className="mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-[480px] items-center">
+      <div className="gentle-enter-delayed mx-auto flex min-h-[calc(100dvh-96px)] w-full max-w-[480px] items-start pt-2 sm:pt-4 md:max-w-[720px] md:items-center md:pt-0">
         <div className="w-full">
           <div className="mb-6 flex items-center justify-center gap-2">
             {[1, 2, 3].map((dot) => (
@@ -482,11 +556,11 @@ export default function Home(): JSX.Element {
             ))}
           </div>
 
-          <div className="relative overflow-hidden">
+          <div className={`relative ${transitioning ? "overflow-hidden" : ""}`}>
             {transitioning && previousStep ? (
               <div className="pointer-events-none absolute inset-0 step-exit">{renderStep(previousStep)}</div>
             ) : null}
-            <div className={transitioning ? "step-enter" : ""}>{renderStep(step)}</div>
+            <div className={transitioning ? "step-enter" : "gentle-enter"}>{renderStep(step)}</div>
           </div>
         </div>
       </div>

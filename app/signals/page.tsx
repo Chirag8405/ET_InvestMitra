@@ -90,6 +90,34 @@ function TableSkeleton(): React.JSX.Element {
   );
 }
 
+function MobileCardsSkeleton(): React.JSX.Element {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 8 }).map((_, row) => (
+        <div
+          key={row}
+          className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="skeleton w-16" />
+            <div className="skeleton w-14" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="skeleton w-12" />
+            <div className="skeleton ml-auto w-16" />
+            <div className="skeleton w-12" />
+            <div className="skeleton ml-auto w-12" />
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <div className="skeleton w-20" />
+            <div className="skeleton w-14" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SignalsPage(): React.JSX.Element {
   const router = useRouter();
   const { theme, isReady: isThemeReady, toggleTheme } = useTheme();
@@ -165,15 +193,15 @@ export default function SignalsPage(): React.JSX.Element {
 
   return (
     <main className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <div className="px-4 pt-8 md:px-12">
-        <div className="flex items-start justify-between gap-4">
+      <div className="gentle-enter px-4 pt-6 sm:pt-8 md:px-8 lg:px-12">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1>Market Signals</h1>
             <p className="mono mt-2 text-[13px] text-[var(--text-secondary)]">
               NSE — updated {updatedAt || "--:--"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-start">
             {isThemeReady ? <ThemeToggle theme={theme} onToggle={toggleTheme} /> : null}
             <Link
               href="/chat"
@@ -189,9 +217,68 @@ export default function SignalsPage(): React.JSX.Element {
         )}
       </div>
 
-      <div className="px-4 pb-8 pt-6 md:px-12">
-        <div className="hide-scrollbar overflow-auto">
-          <table className="w-full min-w-[880px] border-collapse">
+      <div className="gentle-enter-delayed px-4 pb-8 pt-6 md:px-8 lg:px-12">
+        <div className="md:hidden">
+          {loading ? (
+            <MobileCardsSkeleton />
+          ) : (
+            <div className="space-y-2">
+              {sortedRows.map((row, index) => (
+                <button
+                  key={row.ticker}
+                  type="button"
+                  onClick={() =>
+                    router.push(`/chat?q=${encodeURIComponent(`Analyse ${row.ticker} for my portfolio`)}`)
+                  }
+                  className="row-fade-in w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-3 text-left transition-colors duration-100 hover:bg-[var(--bg-secondary)]"
+                  style={{ animationDelay: `${Math.min(index, 10) * 18}ms` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="mono text-[14px] font-semibold text-[var(--text-primary)]">{row.ticker}</p>
+                    <span
+                      className={`mono text-[13px] ${
+                        row.changePercent === null ? "text-[var(--text-tertiary)]" : changeColor(row.changePercent)
+                      }`}
+                    >
+                      {row.changePercent === null ? "--" : signedPercent(row.changePercent)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1 text-[12px] text-[var(--text-secondary)]">
+                    <span>Price</span>
+                    <span className="mono text-right text-[var(--text-primary)]">
+                      {row.price === null
+                        ? "--"
+                        : `\u20B9${row.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+                    </span>
+                    <span>P/E</span>
+                    <span className="mono text-right text-[var(--text-primary)]">
+                      {row.pe === null ? "--" : row.pe.toFixed(1)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    {row.signal === "NEUTRAL" ? (
+                      <span className="text-[12px] text-[var(--text-tertiary)]">Signal: Neutral</span>
+                    ) : (
+                      <span
+                        className={`inline-flex rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-medium ${signalStyle(
+                          row.signal
+                        )}`}
+                      >
+                        {row.signal}
+                      </span>
+                    )}
+                    <span className="text-[12px] text-[var(--text-secondary)]">Analyse →</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="hide-scrollbar hidden overflow-auto md:block">
+          <table className="w-full min-w-[720px] border-collapse">
             <thead className="sticky top-0 bg-[var(--bg-primary)]">
               <tr className="border-b-2 border-[var(--border-default)]">
                 <th className="px-3 py-3 text-left text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
@@ -219,13 +306,14 @@ export default function SignalsPage(): React.JSX.Element {
               <TableSkeleton />
             ) : (
               <tbody>
-                {sortedRows.map((row) => (
+                {sortedRows.map((row, index) => (
                   <tr
                     key={row.ticker}
                     onClick={() =>
                       router.push(`/chat?q=${encodeURIComponent(`Analyse ${row.ticker} for my portfolio`)}`)
                     }
-                    className="cursor-pointer border-b border-[var(--border-subtle)] transition-colors duration-100 hover:bg-[var(--bg-secondary)]"
+                    className="row-fade-in cursor-pointer border-b border-[var(--border-subtle)] transition-colors duration-100 hover:bg-[var(--bg-secondary)]"
+                    style={{ animationDelay: `${Math.min(index, 10) * 18}ms` }}
                   >
                     <td className="mono px-3 py-4 text-left text-[14px] font-semibold text-[var(--text-primary)]">
                       {row.ticker}

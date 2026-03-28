@@ -209,8 +209,8 @@ export function ChatMessage({
   if (isUser) {
     return (
       <div className={`mb-6 flex justify-end ${animate ? "message" : ""}`}>
-        <div className="max-w-[78%] text-right">
-          <p className="text-[15px] font-medium leading-[1.6] text-[var(--text-primary)]">{message.content}</p>
+        <div className="max-w-[88%] text-right sm:max-w-[78%]">
+          <p className="break-words text-[15px] font-medium leading-[1.6] text-[var(--text-primary)]">{message.content}</p>
           <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{formatTimestamp(message.timestamp)}</p>
         </div>
       </div>
@@ -220,11 +220,11 @@ export function ChatMessage({
   const stepsToShow = isLoading ? activeSteps : message.steps || [];
 
   return (
-    <article className={`mb-8 ${animate ? "message" : ""}`}>
+    <article className={`mb-8 overflow-x-hidden ${animate ? "message" : ""}`}>
       <div className="max-w-full">
         <ReasoningChain steps={stepsToShow} isLoading={isLoading} />
 
-        <div className="leading-6" dangerouslySetInnerHTML={{ __html: mainHtml }} />
+        <div className="leading-6 [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: mainHtml }} />
 
         {message.citations && message.citations.length > 0 && (
           <div className="hide-scrollbar mt-3 overflow-x-auto pb-1">

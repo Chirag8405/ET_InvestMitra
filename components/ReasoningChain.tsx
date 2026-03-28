@@ -35,7 +35,7 @@ export function ReasoningChain({ steps, isLoading }: ReasoningChainProps): React
   return (
     <div
       className={`mb-4 overflow-hidden transition-all duration-[400ms] ${
-        collapsing ? "max-h-0 opacity-0" : "max-h-24 opacity-100"
+        collapsing ? "max-h-0 opacity-0" : "max-h-40 opacity-100"
       }`}
       aria-live="polite"
     >

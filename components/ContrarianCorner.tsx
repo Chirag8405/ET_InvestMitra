@@ -38,7 +38,7 @@ export function ContrarianCorner({ text }: ContrarianCornerProps): React.JSX.Ele
 
       <div
         className={`overflow-hidden transition-all duration-[250ms] ease-out ${
-          open ? "max-h-[460px] opacity-100" : "max-h-0 opacity-0"
+          open ? "max-h-[70vh] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
         <div className="mt-2 border-l-2 border-[var(--text-primary)] rounded-r-[var(--radius-md)] bg-[var(--bg-secondary)] px-4 py-3">
