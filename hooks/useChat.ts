@@ -282,7 +282,7 @@ export function useChat(): {
       setCurrentSteps((prev) => prev.map((step) => ({ ...step, status: "done" })));
       setIsLoading(false);
     }
-  }, [messages]);
+  }, [messages, addLog]);
 
   return {
     messages,
