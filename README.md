@@ -1,106 +1,123 @@
 # InvestMitra
 
-Portfolio-aware AI market analyst for Indian retail investors.
 
-InvestMitra combines live market data, fundamentals, and user portfolio context to generate structured analysis with citations, contrarian thinking, and optional voice interaction.
+## What This App Is About
 
-## 1) Problem Statement
+InvestMitra is a portfolio-aware AI market analyst for Indian equities.
 
-Traditional retail market assistants are usually weak in one or more areas:
+It combines:
 
-- Generic output not tied to the user's actual holdings.
-- Missing or low-quality source attribution.
-- Weak downside framing (no explicit bear case).
-- No durable memory across refreshes.
-- Cosmetic reasoning steps not grounded in real backend operations.
-- Poor handling of multi-ticker questions.
+- User holdings and investor profile.
+- Live market snapshots.
+- Screener fundamentals.
+- ET Markets news signals.
 
-InvestMitra addresses these issues by enforcing structured responses and combining portfolio intelligence with live data and cited sources.
+The app then generates structured analysis with citations and a mandatory contrarian view.
 
-## 2) What Was Fixed
+## What Problem It Fixes
 
-The application was audited and upgraded across critical paths:
+Retail investing assistants are often generic and miss portfolio context.
 
-1. Contrarian parsing consistency across analyst/explain modes.
-2. Multi-ticker context now includes all fetched stocks/fundamentals (not just first success).
-3. Durable chat history via localStorage + context-window-aware truncation.
-4. Real source links (NSE, Screener, ET RSS) displayed in clickable badges.
-5. News reasoning step backed by real ET Markets RSS fetch.
-6. Voice improvements:
-- Optional auto-read responses.
-- Functional microphone input (SpeechRecognition), hidden when unsupported.
-7. Stock API hardening:
-- Removed runtime pip install.
-- Added yfinance install-time dependency.
-- Timeout-protected fallback execution.
-- Cached NSE cookie session.
-8. ESLint configuration aligned with Next.js 14 + ESLint 8.
-9. Behavioral decision logging + Discipline Score in sidebar.
+Common issues:
 
-## 3) Product Features
+- Responses are not tied to the user's actual holdings.
+- Limited downside framing and weak bear-case discussion.
+- Missing source transparency.
+- Poor continuity across refreshes.
+- Weak mobile usability in chat-first workflows.
 
-- Onboarding with profile + holdings capture.
-- Two response modes:
-- Analyst mode (technical).
-- Explain mode (plain language).
-- Structured output sections with mandatory contrarian block.
-- Streaming chat responses.
-- Reasoning chain UI.
-- Portfolio concentration checks.
-- Top Signals dashboard for major NSE symbols.
-- Source citations with outbound links.
-- Voice playback and optional voice input.
-- Behavioral decision log and placeholder discipline scoring.
+## How It Fixes The Problem
 
-## 4) Architecture
+InvestMitra fixes those gaps through product and architecture choices:
 
-### Frontend (Next.js App Router)
+1. Portfolio-aware context assembly.
+- `lib/context-assembler.ts` merges holdings, concentration checks, market data, fundamentals, news, and recent chat history.
 
-- `app/page.tsx`: onboarding flow.
-- `app/chat/page.tsx`: chat UI, sidebar, mode toggle, voice toggle, decision summary.
-- `app/signals/page.tsx`: signals dashboard.
+2. Strict response contracts.
+- `lib/prompts.ts` enforces structured outputs and mandatory contrarian coverage.
 
-### Hooks
+3. Streaming + citations.
+- `pages/api/chat.ts` streams responses over SSE and emits citation payloads.
 
-- `hooks/usePortfolio.ts`: portfolio/profile persistence.
-- `hooks/useChat.ts`: streaming chat, reasoning step state, chat persistence, decision logging.
-- `hooks/useVoice.ts`: text-to-speech, speech-to-text, contrarian stripping for voice.
-- `hooks/useDecisionLog.ts`: behavioral log storage and score calculation.
+4. Multi-source data strategy.
+- `pages/api/stock.ts` uses NSE first and falls back to yfinance.
+- `pages/api/screener.ts` fetches fundamentals from Screener.
+- `pages/api/news.ts` fetches ET RSS headlines.
 
-### Backend (Next.js API Routes)
+5. Resilience and persistence.
+- Local persistence for profile, theme, chat history, and decision logs.
+- Source caching to reduce repeated external fetches and improve responsiveness.
 
-- `pages/api/chat.ts`: orchestrates stock/fundamental/news fetches, assembles context, streams LLM response.
-- `pages/api/stock.ts`: NSE primary, yfinance fallback.
-- `pages/api/screener.ts`: Screener fundamentals extraction.
-- `pages/api/news.ts`: ET RSS headlines (48h filtered).
+6. Mobile-first UX improvements.
+- Chat prompt tray with chevron toggle on small screens.
+- Larger mobile bottom-nav tap targets and hide-on-typing behavior.
+- Overflow guards for long generated content.
 
-### Context + Prompting
+## Contrarian Part (Bear-Case Engine)
 
-- `lib/context-assembler.ts`: composes portfolio, market, fundamentals, news, and chat history into model context.
-- `lib/prompts.ts`: system prompts for analyst and explain modes.
+The contrarian part is a first-class requirement in InvestMitra.
 
-### Types
+What it does:
 
-- `types/index.ts`: shared domain types (`StockData`, `Fundamentals`, `ChatMessage`, `DecisionLog`, etc.).
+- Forces a downside scenario in every AI response.
+- Prevents one-sided bullish answers.
+- Makes the user see what could go wrong before taking action.
 
-## 5) Data Flow
+Where it is implemented:
 
-1. User sends question from chat UI.
-2. Backend extracts tickers and fetches, in parallel:
-- Stock data (`/api/stock`) for each ticker.
-- Fundamentals (`/api/screener`) for each ticker.
-- News (`/api/news`) for first relevant ticker.
-3. Context is assembled with profile + history + market/fundamentals/news.
-4. Prompt + context are streamed to model.
-5. Streamed response and citations render in UI.
-6. Assistant response is persisted; decision log entry is stored.
+1. Prompt-level enforcement
+- `lib/prompts.ts` requires a `CONTRARIAN CORNER` section in both analyst and explain modes.
 
-## 6) Setup Instructions
+2. API streaming pipeline
+- `pages/api/chat.ts` appends a format reminder so streamed output includes the contrarian section.
+
+3. UI parsing and rendering
+- `components/ChatMessage.tsx` detects/splits contrarian blocks from assistant content.
+- `components/ContrarianCorner.tsx` renders the expandable bear-case panel in chat.
+
+Quick validation:
+
+- Ask: "What is the outlook for RELIANCE in my portfolio?"
+- Confirm the answer contains a dedicated `CONTRARIAN CORNER` block.
+
+## Architecture
+
+### Frontend (App Router)
+
+- `app/page.tsx` - onboarding and holdings setup.
+- `app/chat/page.tsx` - chat experience, prompts, mobile nav, drawer, theme toggle.
+- `app/signals/page.tsx` - market signals view with mobile cards and desktop table.
+
+### Backend (API Routes)
+
+- `pages/api/chat.ts` - context orchestration and provider streaming.
+- `pages/api/stock.ts` - NSE quote fetch + yfinance fallback.
+- `pages/api/screener.ts` - fundamentals extraction.
+- `pages/api/news.ts` - ET RSS ingestion with ticker filtering.
+
+### Hooks and State
+
+- `hooks/usePortfolio.ts` - profile and holdings persistence.
+- `hooks/useChat.ts` - chat state, streaming parsing, chat persistence, decision logs.
+- `hooks/useVoice.ts` - speech synthesis utilities.
+- `hooks/useTheme.ts` - light and dark theme handling.
+- `hooks/useDecisionLog.ts` - behavior log and simple score utility.
+
+### AI Provider Flow
+
+`/api/chat` provider order:
+
+1. Groq (`GROQ_API_KEY`) using `qwen/qwen3-32b`.
+2. Anthropic (`ANTHROPIC_API_KEY`) using `claude-sonnet-4-20250514`.
+3. Mock streaming response when no key is configured.
+
+## Setup Instructions
 
 ### Prerequisites
 
-- Node.js 18+ and npm.
-- Python 3 + pip (optional but recommended for yfinance fallback path).
+- Node.js 18+
+- npm
+- Python 3 + pip (recommended for yfinance fallback path)
 
 ### Install
 
@@ -108,19 +125,20 @@ The application was audited and upgraded across critical paths:
 npm install
 ```
 
-`postinstall` attempts to install Python deps from `requirements.txt` quietly.
+Note: `postinstall` attempts to install Python dependencies from `requirements.txt` quietly.
 
 ### Environment
 
-Create `.env.local`:
+Create `.env.local` in the project root:
 
 ```env
-ANTHROPIC_API_KEY=your_actual_key_here
+GROQ_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
 ```
 
-If API key is absent, chat route runs in mock-response mode for UI/dev validation.
+Only one key is required.
 
-### Run (development)
+### Run In Development
 
 ```bash
 npm run dev
@@ -128,76 +146,57 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-### Build (production check)
+### Build
 
 ```bash
 npm run build
 ```
 
+### Start Production Server
+
+```bash
+npm run start
+```
+
 ### Lint
 
 ```bash
-npx eslint . --ext .ts,.tsx
+npm run lint
 ```
 
-## 7) Verification Checklist
-
-Recommended sanity checks after setup:
-
-1. Build and lint pass.
-2. Ask in explain mode and ensure `CONTRARIAN CORNER` is rendered.
-3. Ask: "Compare TCS and INFY for my portfolio" and verify both appear in citations/context-backed output.
-4. Refresh mid-conversation and confirm messages persist.
-5. Click source badges and verify NSE/Screener URLs open.
-6. Check news citations appear from ET RSS.
-7. Measure stock API latency:
-
-```bash
-time curl -s "http://localhost:3000/api/stock?ticker=RELIANCE"
-```
-
-8. Enable "Read responses aloud" and verify auto-voice after response completion.
-9. Confirm sidebar shows decisions count and discipline score after chat interactions.
-
-## 8) API Reference (Quick)
+## API Summary
 
 ### `POST /api/chat`
 
-Request body:
+Input:
 
 ```json
 {
-	"messages": [],
-	"profile": { "...": "UserProfile" },
-	"question": "Compare TCS and INFY"
+  "messages": [],
+  "profile": { "...": "UserProfile" },
+  "question": "Compare TCS and INFY for my portfolio"
 }
 ```
 
-Response: Server-Sent Events stream with `META:`, text chunks, `CITATIONS:`, `[DONE]`.
+Output: SSE stream with `META`, optional `THINKING`, text chunks, `CITATIONS`, and `[DONE]`.
 
 ### `GET /api/stock?ticker=RELIANCE`
 
-Returns live stock snapshot from NSE or yfinance fallback.
+Returns stock snapshot from NSE or yfinance fallback.
 
 ### `GET /api/screener?ticker=TCS`
 
-Returns basic fundamentals scraped from Screener.
+Returns Screener fundamentals for ticker.
 
 ### `GET /api/news?ticker=TCS`
 
-Returns ET RSS headlines (up to 5) within last 48 hours.
+Returns recent ET RSS headlines.
 
-## 9) Known Limitations
-
-- If ET RSS has no recent ticker-matching headlines, news array may be empty.
-- SpeechRecognition availability depends on browser engine.
-- yfinance fallback path depends on Python environment availability.
-- One non-blocking lint warning may still appear for hook dependency strictness.
-
-## 10) Tech Stack
+## Tech Stack
 
 - Next.js 14
-- TypeScript
-- Tailwind CSS + shadcn/ui
+- React 18 + TypeScript
+- Tailwind CSS
+- Groq SDK
 - Anthropic SDK
-- NSE + Screener + ET RSS + yfinance (fallback)
+- axios + cheerio
