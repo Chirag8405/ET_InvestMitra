@@ -6,8 +6,9 @@ import { assembleClaudeContext } from "../../lib/context-assembler";
 import {
   ANALYST_SYSTEM_PROMPT,
   EXPLAIN_SYSTEM_PROMPT,
+  FORMAT_REMINDER,
   ONBOARDING_CONTEXT_PRIMER,
-} from "../../lib/prompts";
+} from "@/lib/prompts";
 import type { ChatMessage, Fundamentals, StockData, UserProfile } from "../../types";
 
 const KNOWN_NSE_TICKERS = new Set<string>([
@@ -237,20 +238,35 @@ export default async function handler(
     if (useGroq) {
       const groq = new Groq({ apiKey: groqApiKey });
       provider = "groq";
-      stream = (await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+      const requestPayload = {
+        model: "qwen/qwen3-32b",
         messages: [
           {
-            role: "system",
+            role: "system" as const,
             content: systemPrompt,
           },
           {
-            role: "user",
-            content: `${fullContext}\n\n${question}`,
+            role: "user" as const,
+            content: `${fullContext}\n\n${question}${FORMAT_REMINDER}`,
           },
         ],
-        stream: true,
-      })) as unknown as AsyncIterable<unknown>;
+        stream: true as const,
+        temperature: 0.6,
+        max_tokens: 16384,
+      };
+
+      try {
+        stream = (await groq.chat.completions.create({
+          ...(requestPayload as Record<string, unknown>),
+          // @ts-ignore Some Groq deployments reject this parameter at runtime.
+          reasoning_effort: "low",
+        } as never)) as unknown as AsyncIterable<unknown>;
+      } catch {
+        // Fallback when reasoning_effort is unsupported by the active endpoint.
+        stream = (await groq.chat.completions.create(
+          requestPayload as never
+        )) as unknown as AsyncIterable<unknown>;
+      }
     } else {
       const anthropic = new Anthropic({ apiKey: anthropicApiKey });
       provider = "anthropic";

@@ -27,6 +27,18 @@ function updateStep(
   return steps.map((step, i) => (i === index ? { ...step, status } : step));
 }
 
+function stripThinkBlocks(content: string): string {
+  let cleaned = content.replace(/<think>[\s\S]*?<\/think>/g, "");
+
+  const thinkStart = cleaned.lastIndexOf("<think>");
+  const thinkEnd = cleaned.lastIndexOf("</think>");
+  if (thinkStart !== -1 && thinkStart > thinkEnd) {
+    cleaned = cleaned.slice(0, thinkStart);
+  }
+
+  return cleaned;
+}
+
 function getStoredProfile(): UserProfile | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -161,7 +173,8 @@ export function useChat(): {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      let eventBuffer = "";
+      let displayBuffer = "";
       let firstDataArrived = false;
       let textStarted = false;
       let finalContent = "";
@@ -179,9 +192,9 @@ export function useChat(): {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
+        eventBuffer += decoder.decode(value, { stream: true });
+        const events = eventBuffer.split("\n\n");
+        eventBuffer = events.pop() || "";
 
         for (const eventChunk of events) {
           const line = eventChunk
@@ -249,12 +262,14 @@ export function useChat(): {
             textStarted = true;
           }
 
-          finalContent += data;
+          displayBuffer += data;
+          const cleanedContent = stripThinkBlocks(displayBuffer);
+          finalContent = cleanedContent;
 
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantId
-                ? { ...msg, content: `${msg.content}${data}` }
+                ? { ...msg, content: cleanedContent }
                 : msg
             )
           );

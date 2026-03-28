@@ -29,27 +29,46 @@ function parseMarkdownInline(input: string): string {
     .replace(/\n/g, "<br />");
 }
 
-function splitContrarian(content: string): { main: string; contrarian: string } {
-  const contrarian_markers = [
-    "CONTRARIAN CORNER",
-    "Contrarian Corner",
-    "contrarian corner",
-    "THE OTHER SIDE",
-    "The Other Side",
-  ];
-  const contrarianIndex = contrarian_markers.reduce((idx, marker) => {
+const CONTRARIAN_MARKERS = [
+  "**CONTRARIAN CORNER**",
+  "**Contrarian Corner**",
+  "**CONTRARIAN VIEW**",
+  "CONTRARIAN CORNER",
+  "**THE OTHER SIDE**",
+  "**BEAR CASE**",
+];
+
+const extractContrarian = (content: string): string | null => {
+  // Guard: don't parse error messages or non-AI/short content.
+  if (!content || content.length < 50) return null;
+  if (content.startsWith("Unable to")) return null;
+  if (!content.includes("ASSESSMENT") && !content.includes("HAPPENING")) return null;
+
+  for (const marker of CONTRARIAN_MARKERS) {
+    const idx = content.indexOf(marker);
+    if (idx !== -1) {
+      const after = content.slice(idx + marker.length).trim();
+      const cutoff = after.search(/\n---|\nThis is market|Friendly reminder/);
+      const cleaned = cutoff !== -1 ? after.slice(0, cutoff).trim() : after.trim();
+      if (cleaned.length > 20) return cleaned;
+    }
+  }
+
+  if (content.includes("**MARKET ASSESSMENT**") || content.includes("**WHAT")) {
+    console.warn("CONTRARIAN NOT FOUND in valid response:", content.slice(0, 200));
+  }
+
+  return null;
+};
+
+function splitMainAndContrarian(content: string): { main: string; contrarian: string } {
+  const contrarianIndex = CONTRARIAN_MARKERS.reduce((idx, marker) => {
     const found = content.indexOf(marker);
     return found !== -1 && (idx === -1 || found < idx) ? found : idx;
   }, -1);
 
-  if (contrarianIndex === -1) {
-    return { main: content, contrarian: "" };
-  }
-
-  const main = content.slice(0, contrarianIndex).trim();
-  const afterHeader = content.slice(contrarianIndex);
-  const newlineIndex = afterHeader.indexOf("\n");
-  const contrarian = (newlineIndex === -1 ? "" : afterHeader.slice(newlineIndex + 1)).trim();
+  const main = contrarianIndex === -1 ? content : content.slice(0, contrarianIndex).trim();
+  const contrarian = extractContrarian(content) || "";
   return { main, contrarian };
 }
 
@@ -63,7 +82,12 @@ export function ChatMessage({
 }: ChatMessageProps): React.JSX.Element {
   const isUser = message.role === "user";
 
-  const parsed = useMemo(() => splitContrarian(message.content), [message.content]);
+  const parsed = useMemo(() => {
+    if (isUser) {
+      return { main: message.content, contrarian: "" };
+    }
+    return splitMainAndContrarian(message.content);
+  }, [isUser, message.content]);
   const mainHtml = useMemo(() => parseMarkdownInline(parsed.main || message.content), [parsed.main, message.content]);
 
   if (isUser) {
