@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { assembleClaudeContext } from "../../lib/context-assembler";
@@ -97,7 +98,7 @@ function writeMockStream(
 ): void {
   const mockText =
     "**MARKET ASSESSMENT**\n" +
-    "Live AI analysis is running in mock mode because ANTHROPIC_API_KEY is not configured. Market data and fundamentals context were assembled successfully.\n\n" +
+    "Live AI analysis is running in mock mode because no AI API key is configured (set GROQ_API_KEY or ANTHROPIC_API_KEY). Market data and fundamentals context were assembled successfully.\n\n" +
     "**FOR YOUR PORTFOLIO**\n" +
     "Your current holdings were evaluated for concentration and risk exposure using the provided profile.\n\n" +
     "**CONTRARIAN CORNER**\n" +
@@ -138,7 +139,15 @@ export default async function handler(
   const baseUrl = `${proto}://${host}`;
 
   const mentionedTickers = extractTickers(question);
-  const firstMentionedTicker = mentionedTickers[0] || "";
+  const holdingsTickers = Array.from(
+    new Set(
+      (profile.holdings || [])
+        .map((holding) => holding.ticker?.toUpperCase())
+        .filter((ticker): ticker is string => Boolean(ticker) && KNOWN_NSE_TICKERS.has(ticker))
+    )
+  );
+  const effectiveTickers = mentionedTickers.length > 0 ? mentionedTickers : holdingsTickers;
+  const firstMentionedTicker = effectiveTickers[0] || "";
 
   let allStockData: StockData[] = [];
   let allFundamentals: Fundamentals[] = [];
@@ -155,9 +164,9 @@ export default async function handler(
     })
     .catch(() => null);
 
-  if (mentionedTickers.length > 0) {
+  if (effectiveTickers.length > 0) {
     const [tickerData, newsResult] = await Promise.all([
-      Promise.all(mentionedTickers.map((ticker) => fetchStockAndFundamentals(baseUrl, ticker))),
+      Promise.all(effectiveTickers.map((ticker) => fetchStockAndFundamentals(baseUrl, ticker))),
       newsPromise,
     ]);
 
@@ -208,8 +217,12 @@ export default async function handler(
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
 
-  const apiKey = process.env.ANTHROPIC_API_KEY || "";
-  if (!apiKey || apiKey === "your_key_here") {
+  const groqApiKey = process.env.GROQ_API_KEY || "";
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || "";
+  const useGroq = Boolean(groqApiKey);
+  const useAnthropic = Boolean(anthropicApiKey && anthropicApiKey !== "your_key_here");
+
+  if (!useGroq && !useAnthropic) {
     writeMockStream(res, citations, {
       firstTicker: allStockData[0]?.ticker,
       priceAtTime: allStockData[0]?.price ?? 0,
@@ -217,23 +230,44 @@ export default async function handler(
     return;
   }
 
-  const anthropic = new Anthropic({ apiKey });
-
+  let provider: "groq" | "anthropic";
   let stream: AsyncIterable<unknown>;
+
   try {
-    stream = (await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      thinking: { type: "enabled", budget_tokens: 3000 },
-      stream: true,
-      system: [{ type: "text", text: systemPrompt }],
-      messages: [
-        {
-          role: "user",
-          content: `${fullContext}\n\n${question}`,
-        },
-      ],
-    })) as unknown as AsyncIterable<unknown>;
+    if (useGroq) {
+      const groq = new Groq({ apiKey: groqApiKey });
+      provider = "groq";
+      stream = (await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: `${fullContext}\n\n${question}`,
+          },
+        ],
+        stream: true,
+      })) as unknown as AsyncIterable<unknown>;
+    } else {
+      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+      provider = "anthropic";
+      stream = (await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        thinking: { type: "enabled", budget_tokens: 3000 },
+        stream: true,
+        system: [{ type: "text", text: systemPrompt }],
+        messages: [
+          {
+            role: "user",
+            content: `${fullContext}\n\n${question}`,
+          },
+        ],
+      })) as unknown as AsyncIterable<unknown>;
+    }
   } catch {
     res.status(500).json({ error: "AI service unavailable" });
     return;
@@ -250,6 +284,17 @@ export default async function handler(
     );
 
     for await (const rawEvent of stream) {
+      if (provider === "groq") {
+        const event = rawEvent as {
+          choices?: Array<{ delta?: { content?: string } }>;
+        };
+        const textDelta = event.choices?.[0]?.delta?.content;
+        if (typeof textDelta === "string" && textDelta.length > 0) {
+          res.write(sseData(textDelta));
+        }
+        continue;
+      }
+
       const event = rawEvent as {
         type?: string;
         delta?: { type?: string; text?: string; thinking?: string };

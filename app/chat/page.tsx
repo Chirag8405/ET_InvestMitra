@@ -210,6 +210,7 @@ function ChatPageContent(): React.JSX.Element {
   const [autoVoiceEnabled, setAutoVoiceEnabled] = useState(false);
   const [decisionCount, setDecisionCount] = useState(0);
   const [disciplineScore, setDisciplineScore] = useState(0);
+  const [greetingLabel, setGreetingLabel] = useState("day");
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -236,6 +237,11 @@ function ChatPageContent(): React.JSX.Element {
     setDecisionCount(getLogs().length);
     setDisciplineScore(getBehavioralScore());
   }, [messages, getLogs, getBehavioralScore]);
+
+  useEffect(() => {
+    const currentHour = new Date().getHours();
+    setGreetingLabel(currentHour < 12 ? "morning" : "afternoon");
+  }, []);
 
   useEffect(() => {
     if (!profile?.holdings?.length) {
@@ -380,30 +386,30 @@ function ChatPageContent(): React.JSX.Element {
     saveProfile({ ...profile, mode });
   };
 
-  const greetingLabel = new Date().getHours() < 12 ? "morning" : "afternoon";
-
   return (
     <main
-      className="min-h-screen bg-white text-zinc-900"
+      className="h-screen overflow-hidden bg-white text-zinc-900"
       style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }}
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] lg:flex-row">
-        <aside className="hidden w-[280px] border-r border-zinc-300 p-6 lg:flex">
-          <SidebarPanel
-            profile={profile}
-            prices={prices}
-            holdingsLoading={holdingsLoading}
-            holdingsError={holdingsError}
-            onUpdateMode={updateMode}
-            onClearChat={clearChat}
-            autoVoiceEnabled={autoVoiceEnabled}
-            onToggleAutoVoice={toggleAutoVoice}
-            decisionCount={decisionCount}
-            disciplineScore={disciplineScore}
-          />
+      <div className="mx-auto flex h-full w-full max-w-[1400px] lg:flex-row">
+        <aside className="hidden h-full w-[280px] shrink-0 border-r border-zinc-300 p-6 lg:flex">
+          <div className="h-full w-full overflow-y-auto pr-1">
+            <SidebarPanel
+              profile={profile}
+              prices={prices}
+              holdingsLoading={holdingsLoading}
+              holdingsError={holdingsError}
+              onUpdateMode={updateMode}
+              onClearChat={clearChat}
+              autoVoiceEnabled={autoVoiceEnabled}
+              onToggleAutoVoice={toggleAutoVoice}
+              decisionCount={decisionCount}
+              disciplineScore={disciplineScore}
+            />
+          </div>
         </aside>
 
-        <section className="relative flex min-h-screen flex-1 flex-col">
+        <section className="relative flex h-full flex-1 flex-col overflow-hidden">
           <div className="border-b border-zinc-300 px-4 py-3 lg:hidden">
             <div className="mx-auto flex w-full max-w-4xl items-center justify-between">
               <div>
@@ -440,7 +446,7 @@ function ChatPageContent(): React.JSX.Element {
             </div>
           </div>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 pb-40 sm:px-6 lg:px-8 lg:pb-32">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 sm:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-4xl space-y-4">
               {messages.length === 0 && (
                 <div className="border border-zinc-300 p-5 text-sm text-zinc-700">
@@ -482,7 +488,7 @@ function ChatPageContent(): React.JSX.Element {
             </div>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-300 bg-white px-4 py-4 sm:px-6 lg:sticky lg:left-auto lg:right-auto lg:px-8">
+          <div className="shrink-0 border-t border-zinc-300 bg-white px-4 py-4 sm:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-4xl">
               {!hasSentMessage && (
                 <div className="mb-3 flex flex-wrap gap-2">

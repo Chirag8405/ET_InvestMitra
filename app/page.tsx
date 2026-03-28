@@ -294,7 +294,7 @@ export default function Home(): JSX.Element {
                 </thead>
                 <tbody>
                   {holdings.map((holding, index) => (
-                    <tr key={`${index}-${holding.ticker}`} className="bg-white">
+                    <tr key={index} className="bg-white">
                       <td className="border-b border-zinc-200 px-3 py-2">
                         <input
                           value={holding.ticker}
@@ -396,7 +396,7 @@ export default function Home(): JSX.Element {
 
             <div className="border border-zinc-300 p-5">
               <p className="text-lg font-medium text-black">
-                {summary.count} holdings | \u20B9
+                {summary.count} holdings | ₹
                 {summary.totalInvested.toLocaleString("en-IN", { maximumFractionDigits: 0 })} total invested |{" "}
                 {Math.round(summary.topSectorPercent)}% in {summary.topSector}
               </p>

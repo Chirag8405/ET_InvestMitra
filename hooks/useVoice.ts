@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 declare global {
   interface SpeechRecognitionResultItem {
@@ -108,15 +108,16 @@ export function useVoice(onTranscript?: (text: string) => void): {
 } {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+  const [isListeningSupported, setIsListeningSupported] = useState(false);
 
-  const isSupported = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return typeof window.speechSynthesis !== "undefined" && typeof SpeechSynthesisUtterance !== "undefined";
-  }, []);
-
-  const isListeningSupported = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsSupported(
+      typeof window.speechSynthesis !== "undefined" &&
+        typeof SpeechSynthesisUtterance !== "undefined"
+    );
+    setIsListeningSupported(Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
   useEffect(() => {

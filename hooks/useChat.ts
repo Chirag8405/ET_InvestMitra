@@ -65,27 +65,37 @@ export function useChat(): {
   sendMessage: (text: string, onAutoSpeak?: (text: string) => void) => Promise<void>;
   clearChat: () => void;
 } {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = window.localStorage.getItem(CHAT_STORAGE_KEY);
-      if (!stored) return [];
-      const parsed = JSON.parse(stored) as Array<ChatMessage & { timestamp: string }>;
-      return parsed.map((message) => ({ ...message, timestamp: new Date(message.timestamp) }));
-    } catch {
-      return [];
-    }
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasHydratedMessages, setHasHydratedMessages] = useState(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentSteps, setCurrentSteps] = useState<ReasoningStep[]>([]);
   const { addLog } = useDecisionLog();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(CHAT_STORAGE_KEY);
+      if (!stored) {
+        setHasHydratedMessages(true);
+        return;
+      }
+      const parsed = JSON.parse(stored) as Array<ChatMessage & { timestamp: string }>;
+      const hydrated = parsed.map((message) => ({ ...message, timestamp: new Date(message.timestamp) }));
+      setMessages(hydrated);
+    } catch {
+      // Ignore malformed storage and start fresh.
+    } finally {
+      setHasHydratedMessages(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasHydratedMessages) return;
     if (messages.length === 0) return;
     const toStore = messages.slice(-MAX_STORED_MESSAGES);
     window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toStore));
-  }, [messages]);
+  }, [messages, hasHydratedMessages]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
