@@ -1,189 +1,227 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, Mic, PanelBottomOpen } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 import { ChatMessage } from "../../components/ChatMessage";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../../components/ui/sheet";
-import { Switch } from "../../components/ui/switch";
 import { useChat } from "../../hooks/useChat";
-import { useDecisionLog } from "../../hooks/useDecisionLog";
 import { usePortfolio } from "../../hooks/usePortfolio";
 import { stripForVoice, useVoice } from "../../hooks/useVoice";
 import type { UserMode } from "../../types";
 
 const PROMPTS = [
-  "Should I add more HDFC Bank to my portfolio?",
-  "Which of my holdings are most overvalued right now?",
-  "What is the market telling me about IT stocks today?",
-  "Am I too concentrated in any sector?",
+  "Which of my holdings looks overvalued right now?",
+  "Where am I most concentrated by sector?",
+  "What is the bear case for HDFCBANK this month?",
+  "Should I trim any position based on current momentum?",
 ];
+
+const INPUT_HINTS = [
+  "Try: Which of my holdings is overvalued?",
+  "Try: What is my highest risk position?",
+  "Try: Give me the contrarian view on RELIANCE",
+  "Try: Am I overexposed to one sector?",
+];
+
+const SIGNAL_UNIVERSE = [
+  "RELIANCE",
+  "HDFCBANK",
+  "TCS",
+  "INFY",
+  "ICICIBANK",
+  "SBIN",
+  "AXISBANK",
+  "BAJFINANCE",
+] as const;
 
 type StockSnapshot = {
   price: number;
-};
-
-type NiftySnapshot = {
-  price: number;
   changePercent: number;
-  source: string;
 };
 
-const NIFTY_CACHE_KEY = "im_nifty_snapshot";
-const NIFTY_CACHE_TTL_MS = 60_000;
+type SidebarSignal = {
+  ticker: string;
+  changePercent: number;
+  price: number;
+};
 
-function modeLabel(mode: UserMode): string {
-  return mode === "analyst" ? "Analyst" : "Explain It To Me";
+function formatRupee(value: number, fractionDigits = 0): string {
+  return `\u20B9${value.toLocaleString("en-IN", { maximumFractionDigits: fractionDigits })}`;
 }
 
-function SkeletonLine({ width }: { width: string }): React.JSX.Element {
-  return <div className={`h-3 animate-pulse bg-zinc-200 ${width}`} />;
+function signedPercent(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function changeColor(value: number): string {
+  if (value > 0) return "finance-positive";
+  if (value < 0) return "finance-negative";
+  return "finance-neutral";
+}
+
+function modeLabel(mode: UserMode): string {
+  return mode === "analyst" ? "Analyst mode" : "Simple mode";
+}
+
+function riskLabel(riskProfile: string): string {
+  return riskProfile.charAt(0).toUpperCase() + riskProfile.slice(1);
+}
+
+function findTicker(input: string, knownTickers: Set<string>): string | null {
+  const candidates = input.toUpperCase().match(/\b[A-Z]{2,}\b/g) || [];
+  for (const candidate of candidates) {
+    if (knownTickers.has(candidate)) return candidate;
+  }
+  return candidates[0] || null;
 }
 
 function SidebarPanel({
   profile,
-  prices,
+  holdingsRows,
+  totalValue,
+  totalChange,
   holdingsLoading,
   holdingsError,
+  signals,
+  onSignalClick,
   onUpdateMode,
-  onClearChat,
-  autoVoiceEnabled,
-  onToggleAutoVoice,
-  decisionCount,
-  disciplineScore,
+  onOpenPortfolio,
 }: {
   profile: ReturnType<typeof usePortfolio>["profile"];
-  prices: Record<string, StockSnapshot>;
+  holdingsRows: Array<{
+    ticker: string;
+    quantity: number;
+    currentPrice: number;
+    pnlPercent: number;
+  }>;
+  totalValue: number;
+  totalChange: number;
   holdingsLoading: boolean;
   holdingsError: string | null;
+  signals: SidebarSignal[];
+  onSignalClick: (ticker: string) => void;
   onUpdateMode: (mode: UserMode) => void;
-  onClearChat: () => void;
-  autoVoiceEnabled: boolean;
-  onToggleAutoVoice: (enabled: boolean) => void;
-  decisionCount: number;
-  disciplineScore: number;
+  onOpenPortfolio: () => void;
 }): React.JSX.Element {
+  if (!profile) {
+    return (
+      <div className="flex h-full flex-col p-4">
+        <p className="text-[15px] font-semibold text-[var(--text-primary)]">InvestMitra</p>
+        <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">Profile unavailable</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-6">
-        <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">InvestMitra</p>
-        <h1 className="mt-1 text-xl font-semibold text-black">InvestMitra</h1>
+    <div className="flex h-full flex-col p-4">
+      <div className="border-b border-[var(--border-subtle)] pb-4">
+        <p className="text-[15px] font-semibold tracking-[-0.02em] text-[var(--text-primary)]">InvestMitra</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
+          {riskLabel(profile.riskProfile)} · {modeLabel(profile.mode)}
+        </p>
       </div>
 
-      {profile && (
-        <section className="mb-6 border border-zinc-300 p-4 text-sm">
-          <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">Profile</p>
-          <p className="mt-2 text-zinc-800">Age: {profile.ageGroup}</p>
-          <p className="text-zinc-800">Risk: {profile.riskProfile}</p>
-          <p className="text-zinc-800">Mode: {modeLabel(profile.mode)}</p>
-        </section>
-      )}
-
-      {profile && (
-        <section className="mb-6 border border-zinc-300 p-4 text-sm">
-          <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">Holdings</p>
-          <div className="mt-3 space-y-2">
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
+        <section>
+          <h3>Portfolio</h3>
+          <div className="mt-2">
             {holdingsLoading && (
-              <div className="space-y-2">
-                <SkeletonLine width="w-full" />
-                <SkeletonLine width="w-5/6" />
-                <SkeletonLine width="w-2/3" />
+              <div className="space-y-2 py-2">
+                <div className="skeleton w-full" />
+                <div className="skeleton w-[92%]" />
+                <div className="skeleton w-[80%]" />
               </div>
             )}
 
-            {!holdingsLoading && profile.holdings.length === 0 && (
-              <p className="text-zinc-500">No holdings added.</p>
+            {!holdingsLoading && holdingsRows.length === 0 && (
+              <p className="py-2 text-[12px] text-[var(--text-secondary)]">No holdings yet.</p>
             )}
 
             {!holdingsLoading &&
-              profile.holdings.map((holding) => {
-                const snapshot = prices[holding.ticker];
-                const pnl = snapshot
-                  ? ((snapshot.price - holding.avgBuyPrice) / holding.avgBuyPrice) * 100
-                  : null;
-
-                return (
-                  <div key={`${holding.ticker}-${holding.quantity}`} className="flex items-center justify-between">
-                    <span className="font-medium text-zinc-900">{holding.ticker}</span>
-                    <span className="text-xs text-zinc-700">
-                      {pnl === null ? "--" : `${pnl > 0 ? "+" : ""}${pnl.toFixed(1)}%`}
-                    </span>
-                  </div>
-                );
-              })}
+              holdingsRows.map((row) => (
+                <div
+                  key={`${row.ticker}-${row.quantity}`}
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-2 text-left transition-colors duration-150 hover:bg-[var(--bg-tertiary)]"
+                >
+                  <span className="mono text-[13px] font-medium text-[var(--text-primary)]">{row.ticker}</span>
+                  <span className="truncate text-[12px] text-[var(--text-secondary)]">
+                    {row.quantity} × {formatRupee(row.currentPrice)}
+                  </span>
+                  <span className={`mono ml-auto text-[12px] ${changeColor(row.pnlPercent)}`}>
+                    {signedPercent(row.pnlPercent)}
+                  </span>
+                </div>
+              ))}
           </div>
-          {holdingsError && <p className="mt-3 text-xs text-zinc-600">{holdingsError}</p>}
-        </section>
-      )}
 
-      {profile && (
-        <section className="mb-6 border border-zinc-300 p-4 text-sm">
-          <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">My Decisions</p>
-          <p className="mt-2 text-zinc-800">Total decisions logged: {decisionCount}</p>
-          <p className="text-zinc-800">Discipline Score: {disciplineScore}/100</p>
-        </section>
-      )}
+          <div className="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] pt-2">
+            <span className="mono text-[12px] text-[var(--text-primary)]">Total · {formatRupee(totalValue)}</span>
+            <span className={`mono text-[12px] ${changeColor(totalChange)}`}>Today {signedPercent(totalChange)}</span>
+          </div>
 
-      {profile && (
-        <section className="mb-6">
-          <p className="mb-2 text-xs tracking-[0.08em] text-zinc-600 uppercase">Mode</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => onUpdateMode("analyst")}
-              className={`border px-2 py-2 text-xs ${
-                profile.mode === "analyst"
-                  ? "border-black bg-black text-white"
-                  : "border-zinc-400 bg-white text-zinc-900"
-              }`}
-            >
-              Analyst
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateMode("explain")}
-              className={`border px-2 py-2 text-xs ${
-                profile.mode === "explain"
-                  ? "border-black bg-black text-white"
-                  : "border-zinc-400 bg-white text-zinc-900"
-              }`}
-            >
-              Explain It To Me
-            </button>
+          {holdingsError && <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">{holdingsError}</p>}
+        </section>
+
+        <section className="mt-5">
+          <h3>Signals</h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {signals.slice(0, 4).map((signal) => {
+              const positive = signal.changePercent >= 0;
+              return (
+                <button
+                  key={signal.ticker}
+                  type="button"
+                  onClick={() => onSignalClick(signal.ticker)}
+                  className={`mono inline-flex items-center gap-2 rounded-[var(--radius-sm)] border px-2 py-1 text-[12px] transition-colors duration-150 ${
+                    positive
+                      ? "border-[var(--accent-positive)] text-[var(--accent-positive)]"
+                      : "border-[var(--accent-negative)] text-[var(--accent-negative)]"
+                  }`}
+                >
+                  <span>{signal.ticker}</span>
+                  <span>{signedPercent(signal.changePercent)}</span>
+                </button>
+              );
+            })}
           </div>
         </section>
-      )}
-
-      {profile && (
-        <section className="mb-6 border border-zinc-300 p-4 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-zinc-800">Read responses aloud</span>
-            <Switch
-              checked={autoVoiceEnabled}
-              onCheckedChange={onToggleAutoVoice}
-              aria-label="Read responses aloud"
-            />
-          </div>
-        </section>
-      )}
-
-      <div className="mt-auto space-y-3 pt-2">
-        <Link href="/signals" className="block text-sm text-zinc-700 underline underline-offset-4 hover:text-black">
-          Open Top Signals
-        </Link>
-        <Link href="/" className="block text-sm text-zinc-700 underline underline-offset-4 hover:text-black">
-          Edit Portfolio
-        </Link>
-        <button
-          type="button"
-          onClick={onClearChat}
-          className="w-full border border-black bg-white px-3 py-2 text-sm text-black"
-        >
-          Clear chat
-        </button>
       </div>
+
+      <div className="mt-4 border border-[var(--border-default)] rounded-[var(--radius-md)] p-1">
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            onClick={() => onUpdateMode("analyst")}
+            className={`rounded-[var(--radius-sm)] px-3 py-2 text-[13px] font-medium transition-colors ${
+              profile.mode === "analyst"
+                ? "bg-[var(--bg-inverse)] text-[var(--text-inverse)]"
+                : "bg-transparent text-[var(--text-secondary)]"
+            }`}
+          >
+            Analyst
+          </button>
+          <button
+            type="button"
+            onClick={() => onUpdateMode("explain")}
+            className={`rounded-[var(--radius-sm)] px-3 py-2 text-[13px] font-medium transition-colors ${
+              profile.mode === "explain"
+                ? "bg-[var(--bg-inverse)] text-[var(--text-inverse)]"
+                : "bg-transparent text-[var(--text-secondary)]"
+            }`}
+          >
+            Simple
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpenPortfolio}
+        className="mt-3 self-start text-[12px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+      >
+        Edit Portfolio
+      </button>
     </div>
   );
 }
@@ -193,32 +231,29 @@ function ChatPageContent(): React.JSX.Element {
   const searchParams = useSearchParams();
   const { profile, isOnboarded, isReady, saveProfile } = usePortfolio();
   const { messages, isLoading, currentSteps, sendMessage, clearChat } = useChat();
-  const { getLogs, getBehavioralScore } = useDecisionLog();
+  const { speak, stop, isSpeaking } = useVoice();
 
   const [draft, setDraft] = useState("");
-  const { speak, stop, isSpeaking, isListeningSupported, isListening, startListening } = useVoice((transcript) => {
-    setDraft((prev) => (prev ? `${prev} ${transcript}` : transcript));
-  });
-
-  const [prices, setPrices] = useState<Record<string, StockSnapshot>>({});
   const [pending, setPending] = useState(false);
+  const [prices, setPrices] = useState<Record<string, StockSnapshot>>({});
+  const [signals, setSignals] = useState<SidebarSignal[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [holdingsError, setHoldingsError] = useState<string | null>(null);
-  const [niftyLoading, setNiftyLoading] = useState(true);
-  const [niftyError, setNiftyError] = useState<string | null>(null);
-  const [niftyData, setNiftyData] = useState<NiftySnapshot | null>(null);
-  const [autoVoiceEnabled, setAutoVoiceEnabled] = useState(false);
-  const [decisionCount, setDecisionCount] = useState(0);
-  const [disciplineScore, setDisciplineScore] = useState(0);
-  const [greetingLabel, setGreetingLabel] = useState("day");
+  const [hintIndex, setHintIndex] = useState(0);
+  const [hintVisible, setHintVisible] = useState(true);
+  const [showEmptyPrompts, setShowEmptyPrompts] = useState(false);
+  const [mobilePortfolioOpen, setMobilePortfolioOpen] = useState(false);
+  const [animatedMessageIds, setAnimatedMessageIds] = useState<string[]>([]);
 
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const initializedMessageIdsRef = useRef(false);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isReady) return;
-    if (!isOnboarded) {
-      router.replace("/");
-    }
+    if (!isOnboarded) router.replace("/");
   }, [isOnboarded, isReady, router]);
 
   useEffect(() => {
@@ -226,25 +261,58 @@ function ChatPageContent(): React.JSX.Element {
     if (prefill && !messages.length) {
       setDraft(prefill);
     }
-  }, [searchParams, messages.length]);
+  }, [messages.length, searchParams]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setAutoVoiceEnabled(window.localStorage.getItem("et_auto_voice") === "true");
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const maxHeight = 5 * 24;
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [draft]);
+
+  useEffect(() => {
+    let timeoutId: number | null = null;
+
+    const interval = window.setInterval(() => {
+      setHintVisible(false);
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+
+      timeoutId = window.setTimeout(() => {
+        setHintIndex((prev) => (prev + 1) % INPUT_HINTS.length);
+        setHintVisible(true);
+      }, 180);
+    }, 8000);
+
+    return () => {
+      window.clearInterval(interval);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    setDecisionCount(getLogs().length);
-    setDisciplineScore(getBehavioralScore());
-  }, [messages, getLogs, getBehavioralScore]);
+    if (messages.length !== 0) {
+      setShowEmptyPrompts(false);
+      return;
+    }
 
-  useEffect(() => {
-    const currentHour = new Date().getHours();
-    setGreetingLabel(currentHour < 12 ? "morning" : "afternoon");
-  }, []);
+    const timeout = window.setTimeout(() => {
+      setShowEmptyPrompts(true);
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [messages.length]);
 
   useEffect(() => {
     if (!profile?.holdings?.length) {
+      setPrices({});
       setHoldingsLoading(false);
       return;
     }
@@ -258,8 +326,8 @@ function ChatPageContent(): React.JSX.Element {
         try {
           const response = await fetch(`/api/stock?ticker=${encodeURIComponent(holding.ticker)}`);
           if (!response.ok) return null;
-          const payload = (await response.json()) as { ticker: string; price: number };
-          return { ticker: holding.ticker, price: payload.price };
+          const payload = (await response.json()) as { price: number; changePercent: number };
+          return { ticker: holding.ticker, price: payload.price, changePercent: payload.changePercent };
         } catch {
           return null;
         }
@@ -268,96 +336,193 @@ function ChatPageContent(): React.JSX.Element {
       .then((rows) => {
         if (!mounted) return;
         const next: Record<string, StockSnapshot> = {};
-        let failed = 0;
+        let failures = 0;
+
         for (const row of rows) {
           if (!row) {
-            failed += 1;
+            failures += 1;
             continue;
           }
-          next[row.ticker] = { price: row.price };
+          next[row.ticker.toUpperCase()] = {
+            price: row.price,
+            changePercent: row.changePercent,
+          };
         }
+
         setPrices(next);
-        if (failed > 0) {
-          setHoldingsError("Some holding prices are unavailable right now.");
+        if (failures > 0) {
+          setHoldingsError("Some live prices are temporarily unavailable.");
         }
       })
       .finally(() => {
-        if (mounted) setHoldingsLoading(false);
+        if (mounted) {
+          setHoldingsLoading(false);
+        }
       });
 
     return () => {
       mounted = false;
     };
-  }, [profile?.holdings]);
+  }, [profile]);
 
   useEffect(() => {
-    let mounted = true;
-    setNiftyLoading(true);
-    setNiftyError(null);
+    const baseUniverse = profile?.holdings?.map((holding) => holding.ticker.toUpperCase()) || [];
+    const universe = Array.from(new Set([...baseUniverse, ...SIGNAL_UNIVERSE])).slice(0, 8);
 
-    if (typeof window !== "undefined") {
-      const raw = window.sessionStorage.getItem(NIFTY_CACHE_KEY);
-      if (raw) {
-        try {
-          const cached = JSON.parse(raw) as { data: NiftySnapshot; timestamp: number };
-          if (Date.now() - cached.timestamp < NIFTY_CACHE_TTL_MS) {
-            setNiftyData(cached.data);
-            setNiftyLoading(false);
-            return () => {
-              mounted = false;
-            };
-          }
-        } catch {
-          // Ignore malformed cache and fetch fresh data.
-        }
-      }
+    if (!universe.length) {
+      setSignals([]);
+      return;
     }
 
-    fetch("/api/stock?ticker=NIFTY50")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Nifty fetch failed");
-        return (await response.json()) as {
-          price: number;
-          changePercent: number;
-          source: string;
-        };
-      })
-      .then((payload) => {
-        if (!mounted) return;
-        const nextData = {
-          price: payload.price,
-          changePercent: payload.changePercent,
-          source: payload.source,
-        };
-        setNiftyData(nextData);
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(
-            NIFTY_CACHE_KEY,
-            JSON.stringify({ data: nextData, timestamp: Date.now() })
-          );
+    let mounted = true;
+
+    Promise.all(
+      universe.map(async (ticker) => {
+        try {
+          const response = await fetch(`/api/stock?ticker=${encodeURIComponent(ticker)}`);
+          if (!response.ok) return null;
+          const payload = (await response.json()) as { price: number; changePercent: number };
+          return {
+            ticker,
+            price: payload.price,
+            changePercent: payload.changePercent,
+          };
+        } catch {
+          return null;
         }
       })
-      .catch(() => {
-        if (mounted) setNiftyError("Nifty 50 live data unavailable.");
-      })
-      .finally(() => {
-        if (mounted) setNiftyLoading(false);
-      });
+    ).then((rows) => {
+      if (!mounted) return;
+      const cleaned = rows
+        .filter((row): row is SidebarSignal => Boolean(row))
+        .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))
+        .slice(0, 4);
+      setSignals(cleaned);
+    });
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isLoading]);
+    const ids = messages.map((message) => message.id);
+
+    if (!initializedMessageIdsRef.current) {
+      initializedMessageIdsRef.current = true;
+      seenMessageIdsRef.current = new Set(ids);
+      return;
+    }
+
+    const newlyAdded = ids.filter((id) => !seenMessageIdsRef.current.has(id));
+    if (newlyAdded.length === 0) return;
+
+    for (const id of newlyAdded) {
+      seenMessageIdsRef.current.add(id);
+    }
+
+    setAnimatedMessageIds((prev) => Array.from(new Set([...prev, ...newlyAdded])));
+
+    const timeout = window.setTimeout(() => {
+      setAnimatedMessageIds((prev) => prev.filter((id) => !newlyAdded.includes(id)));
+    }, 230);
+
+    return () => window.clearTimeout(timeout);
+  }, [messages]);
 
   const hasSentMessage = useMemo(
     () => messages.some((message) => message.role === "user"),
     [messages]
   );
+
+  const holdingsRows = useMemo(() => {
+    if (!profile) return [];
+
+    return profile.holdings.map((holding) => {
+      const livePrice = prices[holding.ticker.toUpperCase()]?.price;
+      const currentPrice = livePrice ?? holding.avgBuyPrice;
+      const pnlPercent =
+        holding.avgBuyPrice > 0
+          ? ((currentPrice - holding.avgBuyPrice) / holding.avgBuyPrice) * 100
+          : 0;
+
+      return {
+        ticker: holding.ticker.toUpperCase(),
+        quantity: holding.quantity,
+        currentPrice,
+        pnlPercent,
+        invested: holding.quantity * holding.avgBuyPrice,
+        currentValue: holding.quantity * currentPrice,
+      };
+    });
+  }, [prices, profile]);
+
+  const totalValue = useMemo(
+    () => holdingsRows.reduce((sum, row) => sum + row.currentValue, 0),
+    [holdingsRows]
+  );
+
+  const totalChange = useMemo(() => {
+    const invested = holdingsRows.reduce((sum, row) => sum + row.invested, 0);
+    if (invested <= 0) return 0;
+    return ((totalValue - invested) / invested) * 100;
+  }, [holdingsRows, totalValue]);
+
+  const knownTickers = useMemo(() => {
+    const set = new Set<string>();
+    for (const holding of profile?.holdings || []) {
+      set.add(holding.ticker.toUpperCase());
+    }
+    for (const signal of signals) {
+      set.add(signal.ticker.toUpperCase());
+    }
+    return set;
+  }, [profile?.holdings, signals]);
+
+  const activeTicker = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.role !== "user") continue;
+      const ticker = findTicker(message.content, knownTickers);
+      if (ticker) return ticker;
+    }
+    return null;
+  }, [knownTickers, messages]);
+
+  const activeTickerPrice = useMemo(() => {
+    if (!activeTicker) return null;
+    const fromHoldings = prices[activeTicker]?.price;
+    if (typeof fromHoldings === "number") return fromHoldings;
+    const signal = signals.find((item) => item.ticker === activeTicker);
+    return signal?.price ?? null;
+  }, [activeTicker, prices, signals]);
+
+  const contextLabel = useMemo(() => {
+    if (!activeTicker) return "Market Analysis";
+    if (typeof activeTickerPrice !== "number") return activeTicker;
+    return `${activeTicker} · ${formatRupee(activeTickerPrice, 2)}`;
+  }, [activeTicker, activeTickerPrice]);
+
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) return;
+
+    const handleScroll = (): void => {
+      const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      shouldAutoScrollRef.current = distanceToBottom <= 100;
+    };
+
+    handleScroll();
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport) return;
+    if (!shouldAutoScrollRef.current) return;
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [isLoading, messages]);
 
   const handleSend = async (text: string): Promise<void> => {
     const trimmed = text.trim();
@@ -365,6 +530,7 @@ function ChatPageContent(): React.JSX.Element {
 
     setPending(true);
     setDraft("");
+
     try {
       await sendMessage(trimmed, (finalContent) => {
         speak(stripForVoice(finalContent));
@@ -374,179 +540,253 @@ function ChatPageContent(): React.JSX.Element {
     }
   };
 
-  const toggleAutoVoice = (checked: boolean): void => {
-    setAutoVoiceEnabled(checked);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("et_auto_voice", String(checked));
-    }
-  };
-
   const updateMode = (mode: UserMode): void => {
     if (!profile || profile.mode === mode) return;
     saveProfile({ ...profile, mode });
   };
 
   return (
-    <main
-      className="h-screen overflow-hidden bg-white text-zinc-900"
-      style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }}
-    >
-      <div className="mx-auto flex h-full w-full max-w-[1400px] lg:flex-row">
-        <aside className="hidden h-full w-[280px] shrink-0 border-r border-zinc-300 p-6 lg:flex">
-          <div className="h-full w-full overflow-y-auto pr-1">
-            <SidebarPanel
-              profile={profile}
-              prices={prices}
-              holdingsLoading={holdingsLoading}
-              holdingsError={holdingsError}
-              onUpdateMode={updateMode}
-              onClearChat={clearChat}
-              autoVoiceEnabled={autoVoiceEnabled}
-              onToggleAutoVoice={toggleAutoVoice}
-              decisionCount={decisionCount}
-              disciplineScore={disciplineScore}
-            />
-          </div>
+    <main className="h-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <div className="flex h-full">
+        <aside className="hidden h-full w-[260px] shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-secondary)] lg:block">
+          <SidebarPanel
+            profile={profile}
+            holdingsRows={holdingsRows}
+            totalValue={totalValue}
+            totalChange={totalChange}
+            holdingsLoading={holdingsLoading}
+            holdingsError={holdingsError}
+            signals={signals}
+            onSignalClick={(ticker) => void handleSend(`Analyse ${ticker} for my portfolio`)}
+            onUpdateMode={updateMode}
+            onOpenPortfolio={() => router.push("/")}
+          />
         </aside>
 
-        <section className="relative flex h-full flex-1 flex-col overflow-hidden">
-          <div className="border-b border-zinc-300 px-4 py-3 lg:hidden">
-            <div className="mx-auto flex w-full max-w-4xl items-center justify-between">
-              <div>
-                <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">InvestMitra</p>
-                <p className="text-sm font-semibold">InvestMitra</p>
-              </div>
-              <Sheet>
-                <SheetTrigger asChild>
-                  <button type="button" className="inline-flex items-center gap-2 border border-zinc-400 px-3 py-2 text-xs">
-                    <PanelBottomOpen className="h-4 w-4" />
-                    Portfolio
-                  </button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="max-h-[82vh] overflow-y-auto bg-white">
-                  <SheetHeader>
-                    <SheetTitle className="text-black">Portfolio Panel</SheetTitle>
-                  </SheetHeader>
-                  <div className="px-4 pb-6">
-                    <SidebarPanel
-                      profile={profile}
-                      prices={prices}
-                      holdingsLoading={holdingsLoading}
-                      holdingsError={holdingsError}
-                      onUpdateMode={updateMode}
-                      onClearChat={clearChat}
-                      autoVoiceEnabled={autoVoiceEnabled}
-                      onToggleAutoVoice={toggleAutoVoice}
-                      decisionCount={decisionCount}
-                      disciplineScore={disciplineScore}
-                    />
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </div>
-          </div>
+        <section className="relative flex min-h-0 flex-1 flex-col bg-[var(--bg-primary)]">
+          <header className="flex h-[52px] items-center justify-between border-b border-[var(--border-subtle)] px-4 md:px-6">
+            <p className="mono text-[13px] text-[var(--text-secondary)]">{contextLabel}</p>
+            <button
+              type="button"
+              onClick={() => {
+                clearChat();
+                stop();
+              }}
+              className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+            >
+              New chat
+            </button>
+          </header>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 pb-6 sm:px-6 lg:px-8">
-            <div className="mx-auto w-full max-w-4xl space-y-4">
-              {messages.length === 0 && (
-                <div className="border border-zinc-300 p-5 text-sm text-zinc-700">
-                  <p className="mb-2 text-base text-black">
-                    Good {greetingLabel}, here is what markets are doing today.
+          <div ref={messagesViewportRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[720px] px-6 py-6">
+              {messages.length === 0 ? (
+                <div className="fade-in flex min-h-[58vh] flex-col items-center justify-center text-center">
+                  <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text-primary)]">InvestMitra</p>
+                  <p className="mt-2 text-[15px] text-[var(--text-secondary)]">
+                    Your portfolio-aware market analyst.
                   </p>
-                  {niftyLoading && (
-                    <div className="space-y-2">
-                      <SkeletonLine width="w-40" />
-                      <SkeletonLine width="w-24" />
-                    </div>
-                  )}
-                  {!niftyLoading && niftyData && (
-                    <p>
-                      Nifty 50: {niftyData.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })} ({niftyData.changePercent > 0 ? "+" : ""}
-                      {niftyData.changePercent.toFixed(2)}%) [Source: {niftyData.source}]
-                    </p>
-                  )}
-                  {!niftyLoading && niftyError && <p className="text-zinc-600">{niftyError}</p>}
+
+                  <div
+                    className={`mt-6 flex max-w-[620px] flex-wrap justify-center gap-2 transition-opacity duration-300 ${
+                      showEmptyPrompts ? "opacity-100" : "opacity-0"
+                    }`}
+                  >
+                    {PROMPTS.map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        onClick={() => void handleSend(prompt)}
+                        className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-secondary)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--bg-secondary)]"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {messages.map((message, index) => {
+                    const isLastAssistant =
+                      message.role === "assistant" && index === messages.length - 1;
+
+                    let previousUserMessage: string | null = null;
+                    if (message.role === "assistant") {
+                      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+                        if (messages[cursor].role === "user") {
+                          previousUserMessage = messages[cursor].content;
+                          break;
+                        }
+                      }
+                    }
+
+                    return (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        isLoading={isLoading && isLastAssistant}
+                        activeSteps={isLoading && isLastAssistant ? currentSteps : message.steps || []}
+                        onSpeak={speak}
+                        onStopSpeaking={stop}
+                        isSpeaking={isSpeaking}
+                        onRetry={
+                          previousUserMessage
+                            ? () => {
+                                void handleSend(previousUserMessage || "");
+                              }
+                            : undefined
+                        }
+                        animate={animatedMessageIds.includes(message.id)}
+                      />
+                    );
+                  })}
                 </div>
               )}
-
-              {messages.map((message, index) => {
-                const isLastAssistant =
-                  message.role === "assistant" && index === messages.length - 1;
-
-                return (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    isLoading={isLoading && isLastAssistant}
-                    activeSteps={isLoading && isLastAssistant ? currentSteps : message.steps || []}
-                    onSpeak={speak}
-                    onStopSpeaking={stop}
-                    isSpeaking={isSpeaking}
-                  />
-                );
-              })}
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-zinc-300 bg-white px-4 py-4 sm:px-6 lg:px-8">
-            <div className="mx-auto w-full max-w-4xl">
-              {!hasSentMessage && (
-                <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-[56px] shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)] px-4 py-4 md:mb-0 md:px-6">
+            <div className="mx-auto w-full max-w-[720px]">
+              <div
+                className={`overflow-hidden transition-all duration-200 ${
+                  hasSentMessage ? "mb-0 max-h-0 opacity-0" : "mb-3 max-h-40 opacity-100"
+                }`}
+              >
+                <div className="flex flex-wrap gap-2">
                   {PROMPTS.map((prompt) => (
                     <button
-                      key={prompt}
+                      key={`input-${prompt}`}
                       type="button"
-                      onClick={() => handleSend(prompt)}
-                      className="border border-zinc-400 bg-white px-3 py-2 text-xs text-zinc-800 hover:border-black"
+                      onClick={() => void handleSend(prompt)}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2 text-[13px] text-[var(--text-secondary)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--bg-secondary)]"
                     >
                       {prompt}
                     </button>
                   ))}
                 </div>
-              )}
+              </div>
 
               <form
-                onSubmit={(e) => {
-                  e.preventDefault();
+                onSubmit={(event) => {
+                  event.preventDefault();
                   void handleSend(draft);
                 }}
-                className="flex items-center gap-2"
               >
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Ask about your portfolio and markets..."
-                  className="h-11 flex-1 border border-zinc-400 px-3 text-sm outline-none focus:border-black"
-                />
-                {isListeningSupported && (
-                  <button
-                    type="button"
-                    onClick={startListening}
-                    title={isListening ? "Listening..." : "Use voice input"}
-                    className={`h-11 w-11 border ${isListening ? "border-black bg-black text-white" : "border-zinc-400 bg-white text-zinc-700"}`}
-                  >
-                    <Mic className="mx-auto h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={pending || isLoading || !draft.trim()}
-                  className="h-11 w-11 border border-black bg-black text-white disabled:cursor-not-allowed disabled:border-zinc-500 disabled:bg-zinc-400"
-                >
-                  <ArrowUp className="mx-auto h-4 w-4" />
-                </button>
+                <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3 transition-colors duration-150 focus-within:border-[var(--border-strong)]">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void handleSend(draft);
+                      }
+                    }}
+                    placeholder="Ask about your portfolio..."
+                    className="max-h-[120px] w-full resize-none overflow-hidden border-none bg-transparent p-0 text-[15px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+                  />
+
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p
+                      className={`text-[12px] italic text-[var(--text-tertiary)] transition-opacity duration-200 ${
+                        hintVisible ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      {INPUT_HINTS[hintIndex]}
+                    </p>
+
+                    <button
+                      type="submit"
+                      disabled={!draft.trim() || pending || isLoading}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-inverse)] transition-colors duration-150 ${
+                        draft.trim() && !pending && !isLoading
+                          ? "bg-[var(--bg-inverse)]"
+                          : "bg-[var(--bg-tertiary)]"
+                      }`}
+                      aria-label="Send"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               </form>
             </div>
           </div>
         </section>
       </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-30 grid h-[56px] grid-cols-3 border-t border-[var(--border-subtle)] bg-[var(--bg-primary)] md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePortfolioOpen(false)}
+          className={`text-[13px] transition-colors duration-150 ${
+            !mobilePortfolioOpen
+              ? "font-semibold text-[var(--text-primary)]"
+              : "text-[var(--text-tertiary)]"
+          }`}
+        >
+          Chat
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePortfolioOpen((prev) => !prev)}
+          className={`text-[13px] transition-colors duration-150 ${
+            mobilePortfolioOpen
+              ? "font-semibold text-[var(--text-primary)]"
+              : "text-[var(--text-tertiary)]"
+          }`}
+        >
+          Portfolio
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push("/signals")}
+          className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+        >
+          Signals
+        </button>
+      </nav>
+
+      {mobilePortfolioOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close portfolio drawer"
+            className="absolute inset-0 bg-black/10"
+            onClick={() => setMobilePortfolioOpen(false)}
+          />
+          <div className="absolute bottom-[56px] left-0 right-0 h-[60vh] rounded-t-[var(--radius-lg)] border-t border-[var(--border-subtle)] bg-[var(--bg-primary)]">
+            <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--border-default)]" />
+            <SidebarPanel
+              profile={profile}
+              holdingsRows={holdingsRows}
+              totalValue={totalValue}
+              totalChange={totalChange}
+              holdingsLoading={holdingsLoading}
+              holdingsError={holdingsError}
+              signals={signals}
+              onSignalClick={(ticker) => {
+                setMobilePortfolioOpen(false);
+                void handleSend(`Analyse ${ticker} for my portfolio`);
+              }}
+              onUpdateMode={updateMode}
+              onOpenPortfolio={() => {
+                setMobilePortfolioOpen(false);
+                router.push("/");
+              }}
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
 export default function ChatPage(): React.JSX.Element {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-white text-zinc-900" />}>
+    <Suspense fallback={<main className="min-h-screen bg-[var(--bg-primary)]" />}>
       <ChatPageContent />
     </Suspense>
   );

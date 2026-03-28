@@ -38,8 +38,6 @@ type SignalRow = {
   changePercent: number | null;
   pe: number | null;
   signal: "MOMENTUM" | "OVERSOLD DIP" | "EXPENSIVE" | "NEUTRAL";
-  strength: 1 | 2 | 3;
-  error?: string;
 };
 
 function deriveSignal(changePercent: number | null, pe: number | null): SignalRow["signal"] {
@@ -49,30 +47,40 @@ function deriveSignal(changePercent: number | null, pe: number | null): SignalRo
   return "NEUTRAL";
 }
 
-function strengthBars(changePercent: number | null): 1 | 2 | 3 {
-  if (changePercent === null) return 1;
-  const mag = Math.abs(changePercent);
-  if (mag >= 3) return 3;
-  if (mag >= 1) return 2;
-  return 1;
+function signalStyle(signal: SignalRow["signal"]): string {
+  if (signal === "MOMENTUM") {
+    return "border-[var(--accent-positive)] text-[var(--accent-positive)]";
+  }
+  if (signal === "OVERSOLD DIP") {
+    return "border-[var(--accent-neutral)] text-[var(--accent-neutral)]";
+  }
+  if (signal === "EXPENSIVE") {
+    return "border-[var(--border-default)] text-[var(--text-tertiary)]";
+  }
+  return "border-transparent text-[var(--text-tertiary)]";
 }
 
-function signalClass(signal: SignalRow["signal"]): string {
-  if (signal === "MOMENTUM" || signal === "OVERSOLD DIP") return "text-black";
-  if (signal === "EXPENSIVE") return "text-zinc-600";
-  return "text-zinc-400";
+function signedPercent(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function changeColor(value: number): string {
+  if (value > 0) return "finance-positive";
+  if (value < 0) return "finance-negative";
+  return "finance-neutral";
 }
 
 function TableSkeleton(): React.JSX.Element {
   return (
     <tbody>
-      {Array.from({ length: 8 }).map((_, idx) => (
-        <tr key={idx} className="border-b border-zinc-200">
-          {Array.from({ length: 6 }).map((__, cell) => (
-            <td key={cell} className="px-3 py-3">
-              <div className="h-4 w-20 animate-pulse bg-zinc-200" />
-            </td>
-          ))}
+      {Array.from({ length: 10 }).map((_, row) => (
+        <tr key={row} className="border-b border-[var(--border-subtle)]">
+          <td className="px-3 py-4"><div className="skeleton w-16" /></td>
+          <td className="px-3 py-4 text-right"><div className="skeleton ml-auto w-20" /></td>
+          <td className="px-3 py-4 text-right"><div className="skeleton ml-auto w-16" /></td>
+          <td className="px-3 py-4 text-right"><div className="skeleton ml-auto w-12" /></td>
+          <td className="px-3 py-4 text-center"><div className="skeleton mx-auto w-24" /></td>
+          <td className="px-3 py-4 text-center"><div className="skeleton mx-auto w-14" /></td>
         </tr>
       ))}
     </tbody>
@@ -84,6 +92,7 @@ export default function SignalsPage(): React.JSX.Element {
   const [rows, setRows] = useState<SignalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string>("");
 
   useEffect(() => {
     let mounted = true;
@@ -94,15 +103,15 @@ export default function SignalsPage(): React.JSX.Element {
       TICKERS.map(async (ticker): Promise<SignalRow> => {
         const [stockResult, screenerResult] = await Promise.all([
           fetch(`/api/stock?ticker=${encodeURIComponent(ticker)}`)
-            .then(async (res) => {
-              if (!res.ok) throw new Error("Stock fetch failed");
-              return (await res.json()) as StockPayload;
+            .then(async (response) => {
+              if (!response.ok) throw new Error("Stock fetch failed");
+              return (await response.json()) as StockPayload;
             })
             .catch(() => null),
           fetch(`/api/screener?ticker=${encodeURIComponent(ticker)}`)
-            .then(async (res) => {
-              if (!res.ok) throw new Error("Screener fetch failed");
-              return (await res.json()) as ScreenerPayload;
+            .then(async (response) => {
+              if (!response.ok) throw new Error("Screener fetch failed");
+              return (await response.json()) as ScreenerPayload;
             })
             .catch(() => null),
         ]);
@@ -116,21 +125,25 @@ export default function SignalsPage(): React.JSX.Element {
           changePercent,
           pe,
           signal: deriveSignal(changePercent, pe),
-          strength: strengthBars(changePercent),
-          error: !stockResult || !screenerResult ? "Partial data unavailable" : undefined,
         };
       })
     )
       .then((nextRows) => {
         if (!mounted) return;
         setRows(nextRows);
-        if (nextRows.some((row) => row.error)) {
-          setInlineError("Some rows have partial data due to temporary API failures.");
+        if (nextRows.some((row) => row.price === null || row.pe === null)) {
+          setInlineError("Some rows are missing live values due to temporary API limits.");
         }
+        setUpdatedAt(
+          new Date().toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        );
       })
       .catch(() => {
         if (!mounted) return;
-        setInlineError("Unable to load top signals right now.");
+        setInlineError("Unable to load market signals right now.");
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -147,34 +160,51 @@ export default function SignalsPage(): React.JSX.Element {
   );
 
   return (
-    <main
-      className="min-h-screen bg-white px-4 py-8 text-zinc-900 sm:px-6"
-      style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }}
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-start justify-between gap-4">
+    <main className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <div className="px-4 pt-8 md:px-12">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">InvestMitra</p>
-            <h1 className="mt-1 text-2xl font-semibold text-black">Top Signals Dashboard</h1>
-            <p className="mt-2 text-sm text-zinc-600">Live scan across 15 high-liquidity NSE names.</p>
+            <h1>Market Signals</h1>
+            <p className="mono mt-2 text-[13px] text-[var(--text-secondary)]">
+              NSE — updated {updatedAt || "--:--"}
+            </p>
           </div>
-          <Link href="/chat" className="border border-zinc-400 px-3 py-2 text-sm hover:border-black">
-            Back to Chat
+          <Link
+            href="/chat"
+            className="text-[13px] text-[var(--text-tertiary)] transition-colors duration-150 hover:text-[var(--text-primary)]"
+          >
+            Back to chat
           </Link>
         </div>
 
-        {inlineError && <p className="mb-3 text-sm text-zinc-600">{inlineError}</p>}
+        {inlineError && (
+          <p className="mt-3 text-[12px] text-[var(--text-tertiary)]">{inlineError}</p>
+        )}
+      </div>
 
-        <div className="overflow-x-auto border border-zinc-300">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
-            <thead className="bg-zinc-100">
-              <tr>
-                <th className="px-3 py-3 text-left font-medium">Ticker</th>
-                <th className="px-3 py-3 text-left font-medium">Price</th>
-                <th className="px-3 py-3 text-left font-medium">Change%</th>
-                <th className="px-3 py-3 text-left font-medium">PE</th>
-                <th className="px-3 py-3 text-left font-medium">Signal</th>
-                <th className="px-3 py-3 text-left font-medium">Strength</th>
+      <div className="px-4 pb-8 pt-6 md:px-12">
+        <div className="overflow-auto">
+          <table className="w-full min-w-[880px] border-collapse">
+            <thead className="sticky top-0 bg-[var(--bg-primary)]">
+              <tr className="border-b-2 border-[var(--border-default)]">
+                <th className="px-3 py-3 text-left text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  Ticker
+                </th>
+                <th className="px-3 py-3 text-right text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  Price
+                </th>
+                <th className="px-3 py-3 text-right text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  Change
+                </th>
+                <th className="px-3 py-3 text-right text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  P/E
+                </th>
+                <th className="px-3 py-3 text-center text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  Signal
+                </th>
+                <th className="px-3 py-3 text-center text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+                  Action
+                </th>
               </tr>
             </thead>
 
@@ -185,19 +215,41 @@ export default function SignalsPage(): React.JSX.Element {
                 {sortedRows.map((row) => (
                   <tr
                     key={row.ticker}
-                    className="cursor-pointer border-b border-zinc-200 hover:bg-zinc-50"
-                    onClick={() => router.push(`/chat?q=${encodeURIComponent(`Analyse ${row.ticker} for my portfolio`)}`)}
+                    onClick={() =>
+                      router.push(`/chat?q=${encodeURIComponent(`Analyse ${row.ticker} for my portfolio`)}`)
+                    }
+                    className="cursor-pointer border-b border-[var(--border-subtle)] transition-colors duration-100 hover:bg-[var(--bg-secondary)]"
                   >
-                    <td className="px-3 py-3 font-medium text-black">{row.ticker}</td>
-                    <td className="px-3 py-3">{row.price === null ? "--" : row.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3">
-                      {row.changePercent === null
-                        ? "--"
-                        : `${row.changePercent > 0 ? "+" : ""}${row.changePercent.toFixed(2)}%`}
+                    <td className="mono px-3 py-4 text-left text-[14px] font-semibold text-[var(--text-primary)]">
+                      {row.ticker}
                     </td>
-                    <td className="px-3 py-3">{row.pe === null ? "null" : row.pe.toFixed(1)}</td>
-                    <td className={`px-3 py-3 font-medium ${signalClass(row.signal)}`}>{row.signal}</td>
-                    <td className="px-3 py-3 font-mono text-black">{"|".repeat(row.strength)}</td>
+                    <td className="mono px-3 py-4 text-right text-[13px] text-[var(--text-primary)]">
+                      {row.price === null
+                        ? "--"
+                        : `\u20B9${row.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
+                    </td>
+                    <td className={`mono px-3 py-4 text-right text-[13px] ${row.changePercent === null ? "text-[var(--text-tertiary)]" : changeColor(row.changePercent)}`}>
+                      {row.changePercent === null ? "--" : signedPercent(row.changePercent)}
+                    </td>
+                    <td className="mono px-3 py-4 text-right text-[13px] text-[var(--text-primary)]">
+                      {row.pe === null ? "--" : row.pe.toFixed(1)}
+                    </td>
+                    <td className="px-3 py-4 text-center">
+                      {row.signal === "NEUTRAL" ? (
+                        <span className="text-[13px] text-[var(--text-tertiary)]">—</span>
+                      ) : (
+                        <span
+                          className={`inline-flex rounded-[var(--radius-sm)] border px-2 py-1 text-[12px] font-medium ${signalStyle(
+                            row.signal
+                          )}`}
+                        >
+                          {row.signal}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-center">
+                      <span className="text-[13px] text-[var(--text-secondary)]">Analyse →</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

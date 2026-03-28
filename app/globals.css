@@ -4,55 +4,268 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
-    --primary: 0 0% 0%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 4%;
-    --muted: 240 5% 90%;
-    --muted-foreground: 240 4% 38%;
-    --accent: 240 5% 84%;
-    --accent-foreground: 240 10% 4%;
-    --destructive: 240 4% 28%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 84%;
-    --input: 240 6% 84%;
-    --ring: 240 5% 45%;
-    --radius: 0.5rem;
-  }
+    /* Surfaces */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f8f7;
+    --bg-tertiary: #f0f0ee;
+    --bg-inverse: #0f0f0f;
 
-  .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 100%;
-    --card: 240 10% 7%;
-    --card-foreground: 0 0% 100%;
-    --popover: 240 10% 7%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 240 4% 18%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 240 4% 18%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 4% 24%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 240 4% 30%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 24%;
-    --input: 240 4% 24%;
-    --ring: 240 5% 65%;
+    /* Borders */
+    --border-subtle: #e8e8e5;
+    --border-default: #d4d4cf;
+    --border-strong: #a0a09a;
+
+    /* Text */
+    --text-primary: #0f0f0f;
+    --text-secondary: #6b6b63;
+    --text-tertiary: #a0a09a;
+    --text-inverse: #f8f8f7;
+
+    /* Accent */
+    --accent-positive: #16a34a;
+    --accent-negative: #dc2626;
+    --accent-neutral: #d97706;
+
+    /* Typography */
+    --font-sans: var(--font-inter), -apple-system, sans-serif;
+    --font-mono: var(--font-jetbrains), "Fira Code", monospace;
+
+    /* Spacing */
+    --unit: 4px;
+
+    /* Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
   }
 
   * {
-    @apply border-border;
+    box-sizing: border-box;
+    border-color: var(--border-subtle);
+  }
+
+  html,
+  body {
+    height: 100%;
   }
 
   body {
-    @apply bg-background text-foreground;
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    line-height: 1.25;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  small,
+  caption {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+  }
+}
+
+@layer components {
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .finance-positive {
+    color: var(--accent-positive);
+  }
+
+  .finance-negative {
+    color: var(--accent-negative);
+  }
+
+  .finance-neutral {
+    color: var(--text-primary);
+  }
+
+  .message {
+    animation: messageIn 200ms ease forwards;
+  }
+
+  .streaming-tail {
+    opacity: 0.6;
+    transition: opacity 0.1s;
+  }
+
+  .im-section-heading {
+    margin-top: 20px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  .im-body-paragraph {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .im-tooltip {
+    pointer-events: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 6px;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .im-icon-button:hover .im-tooltip,
+  .im-icon-button:focus-visible .im-tooltip {
+    opacity: 1;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-tertiary) 25%,
+      var(--bg-secondary) 50%,
+      var(--bg-tertiary) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: var(--radius-sm);
+    height: 14px;
+  }
+
+  .reasoning-pulse {
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+
+  .fade-in {
+    animation: fadeIn 300ms ease forwards;
+  }
+
+  .step-enter {
+    animation: stepIn 250ms ease forwards;
+  }
+
+  .step-exit {
+    animation: stepOut 250ms ease forwards;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes stepIn {
+  from {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes stepOut {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-100%, 0, 0);
   }
 }

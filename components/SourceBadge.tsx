@@ -1,7 +1,5 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-
 import type { SourceCitation } from "../types";
 
 type SourceBadgeProps = {
@@ -9,13 +7,14 @@ type SourceBadgeProps = {
 };
 
 export function SourceBadge({ citation }: SourceBadgeProps): React.JSX.Element {
+  const fullTitle = `${citation.label} | ${citation.timestamp}${citation.url ? ` | ${citation.url}` : ""}`;
+
   const content = (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-black bg-white px-2 py-1 font-mono text-[11px] text-black"
-      title={citation.url || "No URL available"}
+      className="mono inline-flex items-center rounded-[var(--radius-sm)] border border-[var(--border-subtle)] px-2 py-[2px] text-[11px] text-[var(--text-tertiary)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]"
+      title={fullTitle}
     >
       {citation.label} | {citation.timestamp}
-      {citation.url && <ExternalLink className="h-[10px] w-[10px]" />}
     </span>
   );
 
@@ -25,15 +24,12 @@ export function SourceBadge({ citation }: SourceBadgeProps): React.JSX.Element {
         href={citation.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="hover:underline"
-        title={citation.url}
+        title={fullTitle}
       >
         {content}
       </a>
     );
   }
 
-  return (
-    content
-  );
+  return content;
 }

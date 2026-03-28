@@ -1,25 +1,39 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useRouter } from "next/navigation";
 
-import { PortfolioDNA } from "../components/PortfolioDNA";
 import { usePortfolio } from "../hooks/usePortfolio";
 import type { Holding, RiskProfile, UserMode, UserProfile } from "../types";
 
-const AGE_GROUPS: UserProfile["ageGroup"][] = ["18-25", "26-35", "36-50", "50+"];
-const RISK_OPTIONS: RiskProfile[] = ["conservative", "moderate", "aggressive"];
-const GOAL_OPTIONS: UserProfile["investmentGoal"][] = [
-  "wealth_creation",
-  "retirement",
-  "short_term",
-  "income",
+const AGE_OPTIONS: Array<{ value: UserProfile["ageGroup"]; label: string; description: string }> = [
+  { value: "18-25", label: "18-25", description: "Early-stage compounding" },
+  { value: "26-35", label: "26-35", description: "Growth with risk discipline" },
+  { value: "36-50", label: "36-50", description: "Balanced capital growth" },
+  { value: "50+", label: "50+", description: "Capital protection priority" },
 ];
 
-const MODE_OPTIONS: Array<{ label: string; value: UserMode; description: string }> = [
-  { label: "Like a professional", value: "analyst", description: "Detailed market-style analysis" },
-  { label: "In plain English", value: "explain", description: "Simple explanations without jargon" },
+const RISK_OPTIONS: Array<{ value: RiskProfile; label: string; description: string }> = [
+  { value: "conservative", label: "Conservative", description: "Lower drawdown preference" },
+  { value: "moderate", label: "Moderate", description: "Balanced risk-reward" },
+  { value: "aggressive", label: "Aggressive", description: "Higher volatility tolerance" },
+];
+
+const GOAL_OPTIONS: Array<{
+  value: UserProfile["investmentGoal"];
+  label: string;
+  description: string;
+}> = [
+  { value: "wealth_creation", label: "Wealth creation", description: "Long-term equity compounding" },
+  { value: "retirement", label: "Retirement", description: "Stability across market cycles" },
+  { value: "short_term", label: "Short term", description: "Tactical opportunities" },
+  { value: "income", label: "Income", description: "Cash-flow-focused portfolio" },
+];
+
+const MODE_OPTIONS: Array<{ value: UserMode; label: string; description: string }> = [
+  { value: "analyst", label: "Analyst", description: "Deep market context and rigor" },
+  { value: "explain", label: "Simple", description: "Plain-English decisions" },
 ];
 
 const TICKER_SECTOR_MAP: Record<string, string> = {
@@ -52,6 +66,10 @@ const EMPTY_HOLDING: Holding = {
   sector: "",
 };
 
+function modeLabel(mode: UserMode): string {
+  return mode === "analyst" ? "Analyst mode" : "Simple mode";
+}
+
 function OptionButton({
   selected,
   label,
@@ -60,21 +78,23 @@ function OptionButton({
 }: {
   selected: boolean;
   label: string;
-  description?: string;
+  description: string;
   onClick: () => void;
 }): JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full border px-4 py-3 text-left transition-colors ${
+      className={`w-full rounded-[var(--radius-md)] border px-4 py-3 text-left transition-colors duration-100 ${
         selected
-          ? "border-black bg-black text-white"
-          : "border-zinc-400 bg-white text-zinc-900 hover:border-black"
+          ? "border-[var(--text-primary)] bg-[var(--bg-secondary)]"
+          : "border-[var(--border-default)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]"
       }`}
     >
-      <p className="text-sm font-medium">{label}</p>
-      {description ? <p className="mt-1 text-xs opacity-80">{description}</p> : null}
+      <p className={`text-[14px] ${selected ? "font-semibold" : "font-medium"} text-[var(--text-primary)]`}>
+        {label}
+      </p>
+      <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{description}</p>
     </button>
   );
 }
@@ -84,10 +104,13 @@ export default function Home(): JSX.Element {
   const { isOnboarded, isReady, saveProfile } = usePortfolio();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [previousStep, setPreviousStep] = useState<1 | 2 | 3 | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
+  const transitionTimeoutRef = useRef<number | null>(null);
+
   const [ageGroup, setAgeGroup] = useState<UserProfile["ageGroup"] | null>(null);
   const [riskProfile, setRiskProfile] = useState<RiskProfile | null>(null);
-  const [investmentGoal, setInvestmentGoal] =
-    useState<UserProfile["investmentGoal"] | null>(null);
+  const [investmentGoal, setInvestmentGoal] = useState<UserProfile["investmentGoal"] | null>(null);
   const [mode, setMode] = useState<UserMode | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([{ ...EMPTY_HOLDING }]);
 
@@ -97,6 +120,79 @@ export default function Home(): JSX.Element {
       router.replace("/chat");
     }
   }, [isOnboarded, isReady, router]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        window.clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const transitionTo = (nextStep: 1 | 2 | 3): void => {
+    if (nextStep === step) return;
+
+    setPreviousStep(step);
+    setStep(nextStep);
+    setTransitioning(true);
+
+    if (transitionTimeoutRef.current) {
+      window.clearTimeout(transitionTimeoutRef.current);
+    }
+
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      setPreviousStep(null);
+      setTransitioning(false);
+      transitionTimeoutRef.current = null;
+    }, 250);
+  };
+
+  const step1Stage = useMemo<"age" | "risk" | "goal" | "mode">(() => {
+    if (!ageGroup) return "age";
+    if (!riskProfile) return "risk";
+    if (!investmentGoal) return "goal";
+    return "mode";
+  }, [ageGroup, investmentGoal, riskProfile]);
+
+  const step1Meta = useMemo(() => {
+    if (step1Stage === "age") {
+      return {
+        heading: "Let us start with your age range",
+        subheading: "This helps calibrate investment horizon and drawdown tolerance.",
+        options: AGE_OPTIONS,
+        selected: ageGroup,
+        onSelect: (value: string) => setAgeGroup(value as UserProfile["ageGroup"]),
+      };
+    }
+
+    if (step1Stage === "risk") {
+      return {
+        heading: "How much volatility are you comfortable with?",
+        subheading: "Risk preference changes position sizing and conviction thresholds.",
+        options: RISK_OPTIONS,
+        selected: riskProfile,
+        onSelect: (value: string) => setRiskProfile(value as RiskProfile),
+      };
+    }
+
+    if (step1Stage === "goal") {
+      return {
+        heading: "What is your primary investment goal?",
+        subheading: "Your objective defines whether we optimize growth or protection.",
+        options: GOAL_OPTIONS,
+        selected: investmentGoal,
+        onSelect: (value: string) => setInvestmentGoal(value as UserProfile["investmentGoal"]),
+      };
+    }
+
+    return {
+      heading: "Choose your analysis style",
+      subheading: "You can switch modes later from chat sidebar anytime.",
+      options: MODE_OPTIONS,
+      selected: mode,
+      onSelect: (value: string) => setMode(value as UserMode),
+    };
+  }, [ageGroup, investmentGoal, mode, riskProfile, step1Stage]);
 
   const canContinueStep1 = Boolean(ageGroup && riskProfile && investmentGoal && mode);
 
@@ -127,16 +223,15 @@ export default function Home(): JSX.Element {
     const sectors = Array.from(sectorMap.entries())
       .map(([sector, value]) => ({
         sector,
-        value,
         percent: totalInvested > 0 ? (value / totalInvested) * 100 : 0,
       }))
       .sort((a, b) => b.percent - a.percent);
 
     return {
       totalInvested,
-      topSector: sectors[0]?.sector || "N/A",
+      topSector: sectors[0]?.sector || "Unassigned",
       topSectorPercent: sectors[0]?.percent || 0,
-      count: sanitizedHoldings.length,
+      holdingCount: sanitizedHoldings.length,
     };
   }, [sanitizedHoldings]);
 
@@ -147,11 +242,12 @@ export default function Home(): JSX.Element {
 
         const next = { ...holding, ...patch };
         if (patch.ticker !== undefined) {
-          const normalizedTicker = patch.ticker.toUpperCase().replace(/[^A-Z0-9]/g, "");
-          next.ticker = normalizedTicker;
-          const inferredSector = TICKER_SECTOR_MAP[normalizedTicker];
+          const normalized = patch.ticker.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          next.ticker = normalized;
+          const inferredSector = TICKER_SECTOR_MAP[normalized];
           if (inferredSector) next.sector = inferredSector;
         }
+
         return next;
       })
     );
@@ -159,10 +255,11 @@ export default function Home(): JSX.Element {
 
   const createProfilePayload = (): UserProfile | null => {
     if (!ageGroup || !riskProfile || !investmentGoal || !mode) return null;
+
     return {
       holdings: sanitizedHoldings,
-      riskProfile,
       ageGroup,
+      riskProfile,
       investmentGoal,
       mode,
       onboarded: true,
@@ -176,255 +273,212 @@ export default function Home(): JSX.Element {
     router.push("/chat");
   };
 
-  return (
-    <main
-      className="min-h-screen bg-white px-4 py-8 text-zinc-900 sm:px-8"
-      style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" }}
-    >
-      <div className="mx-auto w-full max-w-4xl">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          {[1, 2, 3].map((dot) => {
-            const completed = dot < step;
-            const current = dot === step;
-            return (
-              <span
-                key={dot}
-                className={`h-2.5 w-2.5 rounded-full border ${
-                  completed || current ? "border-black bg-black" : "border-zinc-500 bg-white"
-                }`}
+  const renderStep = (target: 1 | 2 | 3): JSX.Element => {
+    if (target === 1) {
+      return (
+        <section>
+          <h1>{step1Meta.heading}</h1>
+          <p className="mt-2 mb-8 text-[15px] text-[var(--text-secondary)]">{step1Meta.subheading}</p>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {step1Meta.options.map((option) => (
+              <OptionButton
+                key={option.value}
+                selected={step1Meta.selected === option.value}
+                label={option.label}
+                description={option.description}
+                onClick={() => step1Meta.onSelect(option.value)}
               />
-            );
-          })}
-        </div>
+            ))}
+          </div>
 
-        {step === 1 && (
-          <section className="space-y-6 border border-zinc-300 p-5 sm:p-8">
-            <header>
-              <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">Step 1</p>
-              <h1 className="mt-1 text-2xl font-semibold text-black">About You (30 seconds)</h1>
-            </header>
+          <button
+            type="button"
+            onClick={() => transitionTo(2)}
+            className={`mt-8 h-11 w-full rounded-[var(--radius-md)] bg-[var(--bg-inverse)] text-[15px] font-medium text-[var(--text-inverse)] transition-opacity duration-150 ${
+              canContinueStep1 ? "fade-in opacity-100 hover:opacity-85" : "pointer-events-none opacity-0"
+            }`}
+          >
+            Continue →
+          </button>
+        </section>
+      );
+    }
 
-            <div className="space-y-4">
-              <div>
-                <p className="mb-2 text-sm font-medium">How old are you?</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {AGE_GROUPS.map((option) => (
-                    <OptionButton
-                      key={option}
-                      label={option}
-                      selected={ageGroup === option}
-                      onClick={() => setAgeGroup(option)}
-                    />
-                  ))}
-                </div>
-              </div>
+    if (target === 2) {
+      return (
+        <section>
+          <h1>Add Your Holdings</h1>
+          <p className="mt-2 mb-8 text-[15px] text-[var(--text-secondary)]">
+            Optional, but this unlocks portfolio-aware analysis immediately.
+          </p>
 
-              <div>
-                <p className="mb-2 text-sm font-medium">Your risk appetite?</p>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {RISK_OPTIONS.map((option) => (
-                    <OptionButton
-                      key={option}
-                      label={option.charAt(0).toUpperCase() + option.slice(1)}
-                      selected={riskProfile === option}
-                      onClick={() => setRiskProfile(option)}
-                    />
-                  ))}
-                </div>
-              </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] text-left">
+                  <th className="px-1 py-2 text-[12px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Ticker</th>
+                  <th className="px-1 py-2 text-[12px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Quantity</th>
+                  <th className="px-1 py-2 text-[12px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Avg Buy</th>
+                  <th className="px-1 py-2 text-[12px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Sector</th>
+                  <th className="w-8 px-1 py-2 text-right text-[12px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {holdings.map((holding, index) => (
+                  <tr key={index} className="group border-b border-[var(--border-subtle)] text-[14px]">
+                    <td className="px-1 py-2">
+                      <input
+                        value={holding.ticker}
+                        onChange={(event) => updateHolding(index, { ticker: event.target.value })}
+                        placeholder="RELIANCE"
+                        className="w-full border-b border-transparent bg-transparent px-0 py-1 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                      />
+                    </td>
+                    <td className="px-1 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={holding.quantity || ""}
+                        onChange={(event) =>
+                          updateHolding(index, { quantity: Number(event.target.value) || 0 })
+                        }
+                        className="mono w-full border-b border-transparent bg-transparent px-0 py-1 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                      />
+                    </td>
+                    <td className="px-1 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={holding.avgBuyPrice || ""}
+                        onChange={(event) =>
+                          updateHolding(index, { avgBuyPrice: Number(event.target.value) || 0 })
+                        }
+                        className="mono w-full border-b border-transparent bg-transparent px-0 py-1 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                      />
+                    </td>
+                    <td className="px-1 py-2">
+                      <input
+                        value={holding.sector}
+                        onChange={(event) => updateHolding(index, { sector: event.target.value })}
+                        placeholder="Banking"
+                        className="w-full border-b border-transparent bg-transparent px-0 py-1 text-[14px] outline-none focus:border-[var(--text-primary)]"
+                      />
+                    </td>
+                    <td className="px-1 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHoldings((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                          )
+                        }
+                        className="text-[13px] text-[var(--text-tertiary)] opacity-0 transition-colors duration-100 group-hover:opacity-100 hover:text-[var(--accent-negative)]"
+                        aria-label="Delete holding row"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-              <div>
-                <p className="mb-2 text-sm font-medium">Primary investment goal?</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {GOAL_OPTIONS.map((option) => (
-                    <OptionButton
-                      key={option}
-                      label={option.replaceAll("_", " ")}
-                      selected={investmentGoal === option}
-                      onClick={() => setInvestmentGoal(option)}
-                    />
-                  ))}
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={() => setHoldings((prev) => [...prev, { ...EMPTY_HOLDING }])}
+            className="mt-3 text-[13px] text-[var(--text-tertiary)] transition-colors duration-100 hover:text-[var(--text-primary)]"
+          >
+            + Add holding
+          </button>
 
-              <div>
-                <p className="mb-2 text-sm font-medium">How do you prefer analysis?</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {MODE_OPTIONS.map((option) => (
-                    <OptionButton
-                      key={option.value}
-                      label={option.label}
-                      description={option.description}
-                      selected={mode === option.value}
-                      onClick={() => setMode(option.value)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
+          <div className="mt-8 space-y-2">
             <button
               type="button"
-              onClick={() => setStep(2)}
-              disabled={!canContinueStep1}
-              className="w-full border border-black bg-black px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:border-zinc-400 disabled:bg-zinc-300"
+              onClick={() => transitionTo(3)}
+              className="h-11 w-full rounded-[var(--radius-md)] bg-[var(--bg-inverse)] text-[15px] font-medium text-[var(--text-inverse)] transition-opacity duration-150 hover:opacity-85"
             >
-              Continue to holdings
+              Continue →
             </button>
-          </section>
-        )}
+            <button
+              type="button"
+              onClick={() => transitionTo(1)}
+              className="w-full text-[13px] text-[var(--text-tertiary)] transition-colors duration-100 hover:text-[var(--text-primary)]"
+            >
+              Back
+            </button>
+          </div>
+        </section>
+      );
+    }
 
-        {step === 2 && (
-          <section className="space-y-6 border border-zinc-300 p-5 sm:p-8">
-            <header>
-              <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">Step 2</p>
-              <h2 className="mt-1 text-2xl font-semibold text-black">Your Holdings (optional but recommended)</h2>
-            </header>
+    return (
+      <section>
+        <h1>Profile Ready</h1>
+        <p className="mt-2 mb-8 text-[15px] text-[var(--text-secondary)]">
+          InvestMitra will use this baseline for every response.
+        </p>
 
-            <div className="overflow-x-auto border border-zinc-300">
-              <table className="w-full min-w-[680px] border-collapse text-sm">
-                <thead className="bg-zinc-100 text-zinc-800">
-                  <tr>
-                    <th className="border-b border-zinc-300 px-3 py-2 text-left font-medium">Ticker</th>
-                    <th className="border-b border-zinc-300 px-3 py-2 text-left font-medium">Quantity</th>
-                    <th className="border-b border-zinc-300 px-3 py-2 text-left font-medium">Average buy price</th>
-                    <th className="border-b border-zinc-300 px-3 py-2 text-left font-medium">Sector</th>
-                    <th className="border-b border-zinc-300 px-3 py-2 text-center font-medium">Delete</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {holdings.map((holding, index) => (
-                    <tr key={index} className="bg-white">
-                      <td className="border-b border-zinc-200 px-3 py-2">
-                        <input
-                          value={holding.ticker}
-                          onChange={(e) => updateHolding(index, { ticker: e.target.value })}
-                          placeholder="RELIANCE"
-                          className="w-full border border-zinc-300 px-2 py-1 text-sm outline-none focus:border-black"
-                        />
-                      </td>
-                      <td className="border-b border-zinc-200 px-3 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={holding.quantity || ""}
-                          onChange={(e) => updateHolding(index, { quantity: Number(e.target.value) || 0 })}
-                          className="w-full border border-zinc-300 px-2 py-1 text-sm outline-none focus:border-black"
-                        />
-                      </td>
-                      <td className="border-b border-zinc-200 px-3 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={holding.avgBuyPrice || ""}
-                          onChange={(e) =>
-                            updateHolding(index, { avgBuyPrice: Number(e.target.value) || 0 })
-                          }
-                          className="w-full border border-zinc-300 px-2 py-1 text-sm outline-none focus:border-black"
-                        />
-                      </td>
-                      <td className="border-b border-zinc-200 px-3 py-2">
-                        <input
-                          value={holding.sector}
-                          onChange={(e) => updateHolding(index, { sector: e.target.value })}
-                          placeholder="Banking"
-                          className="w-full border border-zinc-300 px-2 py-1 text-sm outline-none focus:border-black"
-                        />
-                      </td>
-                      <td className="border-b border-zinc-200 px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setHoldings((prev) =>
-                              prev.length === 1 ? prev : prev.filter((_, i) => i !== index)
-                            )
-                          }
-                          className="border border-zinc-400 px-2 py-1 text-xs text-zinc-700 hover:border-black hover:text-black"
-                          aria-label="Delete row"
-                        >
-                          X
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="space-y-3 border-y border-[var(--border-subtle)] py-4">
+          <p className="text-[14px] text-[var(--text-secondary)]">
+            Holdings tracked: <span className="mono text-[var(--text-primary)]">{summary.holdingCount}</span>
+          </p>
+          <p className="text-[14px] text-[var(--text-secondary)]">
+            Total invested: <span className="mono text-[var(--text-primary)]">\u20B9{summary.totalInvested.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+          </p>
+          <p className="text-[14px] text-[var(--text-secondary)]">
+            Top sector: <span className="mono text-[var(--text-primary)]">{Math.round(summary.topSectorPercent)}% {summary.topSector}</span>
+          </p>
+          <p className="text-[14px] text-[var(--text-secondary)]">
+            Mode: <span className="text-[var(--text-primary)]">{modeLabel(mode || "analyst")}</span>
+          </p>
+        </div>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setHoldings((prev) => [...prev, { ...EMPTY_HOLDING }])}
-                className="border border-zinc-700 px-4 py-2 text-sm text-zinc-900 hover:border-black"
-              >
-                Add Row
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="text-sm text-zinc-700 underline underline-offset-4 hover:text-black"
-              >
-                Skip for now
-              </button>
-            </div>
+        <div className="mt-8 space-y-2">
+          <button
+            type="button"
+            onClick={handleFinish}
+            className="h-11 w-full rounded-[var(--radius-md)] bg-[var(--bg-inverse)] text-[15px] font-medium text-[var(--text-inverse)] transition-opacity duration-150 hover:opacity-85"
+          >
+            Continue →
+          </button>
+          <button
+            type="button"
+            onClick={() => transitionTo(2)}
+            className="w-full text-[13px] text-[var(--text-tertiary)] transition-colors duration-100 hover:text-[var(--text-primary)]"
+          >
+            Back
+          </button>
+        </div>
+      </section>
+    );
+  };
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="border border-zinc-700 bg-white px-4 py-2 text-sm text-zinc-900"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="border border-black bg-black px-4 py-2 text-sm text-white"
-              >
-                Continue
-              </button>
-            </div>
-          </section>
-        )}
+  return (
+    <main className="min-h-screen bg-[var(--bg-primary)] px-4 py-8 text-[var(--text-primary)]">
+      <div className="mx-auto flex min-h-[calc(100vh-64px)] w-full max-w-[480px] items-center">
+        <div className="w-full">
+          <div className="mb-6 flex items-center justify-center gap-2">
+            {[1, 2, 3].map((dot) => (
+              <span
+                key={dot}
+                className="h-[6px] w-[6px] rounded-full transition-colors duration-300"
+                style={{
+                  backgroundColor:
+                    dot === step ? "var(--text-primary)" : "var(--border-default)",
+                }}
+              />
+            ))}
+          </div>
 
-        {step === 3 && (
-          <section className="space-y-6 border border-zinc-300 p-5 sm:p-8">
-            <header>
-              <p className="text-xs tracking-[0.08em] text-zinc-600 uppercase">Step 3</p>
-              <h2 className="mt-1 text-2xl font-semibold text-black">Your AI analyst is ready</h2>
-            </header>
-
-            <div className="border border-zinc-300 p-5">
-              <p className="text-lg font-medium text-black">
-                {summary.count} holdings | ₹
-                {summary.totalInvested.toLocaleString("en-IN", { maximumFractionDigits: 0 })} total invested |{" "}
-                {Math.round(summary.topSectorPercent)}% in {summary.topSector}
-              </p>
-              <p className="mt-2 text-sm text-zinc-600">
-                Risk: {riskProfile || "-"} | Goal: {investmentGoal?.replaceAll("_", " ") || "-"} | Mode: {mode || "-"}
-              </p>
-            </div>
-
-            <PortfolioDNA holdings={sanitizedHoldings} />
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="border border-zinc-700 bg-white px-4 py-2 text-sm text-zinc-900"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="border border-black bg-black px-5 py-3 text-sm font-medium text-white"
-              >
-                Start Analysing Markets
-              </button>
-            </div>
-          </section>
-        )}
+          <div className="relative overflow-hidden">
+            {transitioning && previousStep ? (
+              <div className="pointer-events-none absolute inset-0 step-exit">{renderStep(previousStep)}</div>
+            ) : null}
+            <div className={transitioning ? "step-enter" : ""}>{renderStep(step)}</div>
+          </div>
+        </div>
       </div>
     </main>
   );

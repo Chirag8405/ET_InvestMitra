@@ -27,24 +27,39 @@ export function ContrarianCorner({ text }: ContrarianCornerProps): React.JSX.Ele
   if (!cleaned) return null;
 
   return (
-    <section className="mt-4 border-l-2 border-black pl-3">
+    <section className="mt-4">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="text-xs text-zinc-700 hover:text-black"
+        className="w-full border-l-2 border-[var(--border-default)] pl-3 text-left text-[13px] font-medium text-[var(--text-secondary)] transition-all duration-150 hover:border-[var(--text-primary)] hover:text-[var(--text-primary)]"
       >
-        {open ? "Hide bear case ↑" : "See bear case ↓"}
+        Bear case {open ? "↑" : "↓"}
       </button>
 
-      {open && (
-        <div className="mt-2">
-          <p className="mb-2 text-[11px] tracking-[0.08em] text-zinc-700 uppercase">CONTRARIAN VIEW</p>
+      <div
+        className={`overflow-hidden transition-all duration-[250ms] ease-out ${
+          open ? "max-h-[460px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="mt-2 border-l-2 border-[var(--text-primary)] rounded-r-[var(--radius-md)] bg-[var(--bg-secondary)] px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
+              CONTRARIAN VIEW
+            </p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              ↑ Hide
+            </button>
+          </div>
           <div
-            className="text-sm leading-6 text-zinc-900"
+            className="text-[14px] leading-[1.6] text-[var(--text-primary)]"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
-      )}
+      </div>
     </section>
   );
 }
