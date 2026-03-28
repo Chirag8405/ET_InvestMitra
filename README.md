@@ -82,6 +82,44 @@ Quick validation:
 
 ## Architecture
 
+### Architecture Diagram
+
+```text
++-------------------------------------------------------------------------------------------+
+|                                       USER BROWSER                                        |
+|                                                                                           |
+|  +---------------------------------- NEXT.JS FRONTEND ----------------------------------+ |
+|  | app/page.tsx (Portfolio Onboarding)                                                  | |
+|  | app/chat/page.tsx (Chat UI)                                                          | |
+|  | app/signals/page.tsx (Signals Dashboard)                                             | |
+|  | hooks: useChat, usePortfolio, useTheme, useVoice                                     | |
+|  | localStorage: profile, chat history, theme mode, decision logs                       | |
+|  +-------------------------------------+------------------------------------------------+ |
+|                                        | HTTP POST / SSE                                  |
++----------------------------------------v--------------------------------------------------+
+                                         |
+                                         v
++-------------------------------------------------------------------------------------------+
+|                               NEXT.JS API ROUTES (pages/api)                              |
+|                                                                                           |
+|  /api/chat     -> context + prompts + streaming response                                  |
+|                   (uses lib/context-assembler.ts and lib/prompts.ts)                      |
+|  /api/stock    -> NSE quote endpoint + yfinance fallback                                  |
+|  /api/screener -> Screener.in fundamentals                                                |
+|  /api/news     -> ET Markets RSS headlines                                                |
++--------------------------------------+--------------------------------+-------------------+
+                                       |                                |
+                                       v                                v
++------------------------------------------------------+  +-----------------------------------+
+| LLM PROVIDERS                                        |  | DATA SOURCES (FREE)               |
+|                                                      |  |                                   |
+| Groq: qwen/qwen3-32b (primary)                       |  | NSE: nseindia.com APIs            |
+| Anthropic: claude-sonnet-4-20250514 (fallback)       |  | yfinance: Python fallback         |
+| Mock SSE response when no API key is configured      |  | Screener.in public pages          |
+|                                                      |  | ET Markets RSS                    |
++------------------------------------------------------+  +-----------------------------------+
+```
+
 ### Frontend (App Router)
 
 - `app/page.tsx` - onboarding and holdings setup.
