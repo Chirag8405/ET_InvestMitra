@@ -39,6 +39,17 @@ function stripThinkBlocks(content: string): string {
   return cleaned;
 }
 
+function fixSpacing(text: string): string {
+  return text
+    .replace(/([a-z₹%,])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-z])/g, (_, digit: string, letter: string) => {
+      const compactSuffixes = ["k", "K", "m", "M", "b", "B", "x", "X"];
+      if (compactSuffixes.includes(letter)) return `${digit}${letter}`;
+      return `${digit} ${letter}`;
+    })
+    .replace(/  +/g, " ");
+}
+
 function getStoredProfile(): UserProfile | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -134,6 +145,7 @@ export function useChat(): {
       id: assistantId,
       role: "assistant",
       content: "",
+      isStreaming: true,
       steps: INITIAL_STEPS,
       timestamp: new Date(),
     };
@@ -147,7 +159,11 @@ export function useChat(): {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: "Profile not found. Please complete onboarding first." }
+            ? {
+                ...msg,
+                content: "Profile not found. Please complete onboarding first.",
+                isStreaming: false,
+              }
             : msg
         )
       );
@@ -177,6 +193,7 @@ export function useChat(): {
       let displayBuffer = "";
       let firstDataArrived = false;
       let textStarted = false;
+      let sawDone = false;
       let finalContent = "";
       let meta: { firstTicker?: string; priceAtTime?: number } = {};
 
@@ -216,7 +233,7 @@ export function useChat(): {
 
           if (data === "[DONE]") {
             markStepDone(4);
-            setIsLoading(false);
+            sawDone = true;
             continue;
           }
 
@@ -274,7 +291,20 @@ export function useChat(): {
             )
           );
         }
+
+        if (sawDone) {
+          break;
+        }
       }
+
+      const finalizedContent = fixSpacing(finalContent).trim();
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId
+            ? { ...msg, content: finalizedContent, isStreaming: false }
+            : msg
+        )
+      );
 
       setCurrentSteps((prev) => prev.map((step) => ({ ...step, status: "done" })));
       setIsLoading(false);
@@ -282,7 +312,7 @@ export function useChat(): {
       addLog({
         question: trimmed,
         decision: "viewed analysis",
-        biasDetected: detectBiasFromContrarian(finalContent),
+        biasDetected: detectBiasFromContrarian(finalizedContent),
         ticker: meta.firstTicker || extractTickerFromQuestion(trimmed),
         priceAtTime: meta.priceAtTime ?? 0,
       });
@@ -290,8 +320,8 @@ export function useChat(): {
       const autoVoice =
         typeof window !== "undefined" &&
         window.localStorage.getItem("et_auto_voice") === "true";
-      if (autoVoice && finalContent && onAutoSpeak) {
-        window.setTimeout(() => onAutoSpeak(finalContent), 400);
+      if (autoVoice && finalizedContent && onAutoSpeak) {
+        window.setTimeout(() => onAutoSpeak(finalizedContent), 400);
       }
     } catch {
       setMessages((prev) =>
@@ -300,6 +330,7 @@ export function useChat(): {
             ? {
                 ...msg,
                 content: "Unable to fetch response right now. Please try again.",
+                isStreaming: false,
               }
             : msg
         )

@@ -69,6 +69,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  isStreaming?: boolean;
   reasoning?: string;          // Extended thinking content
   citations?: SourceCitation[];
   contrarian?: string;         // Bear case content

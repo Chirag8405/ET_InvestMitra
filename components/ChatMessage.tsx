@@ -68,8 +68,7 @@ function splitMainAndContrarian(content: string): { main: string; contrarian: st
   }, -1);
 
   const main = contrarianIndex === -1 ? content : content.slice(0, contrarianIndex).trim();
-  const contrarian = extractContrarian(content) || "";
-  return { main, contrarian };
+  return { main, contrarian: "" };
 }
 
 export function ChatMessage({
@@ -86,8 +85,14 @@ export function ChatMessage({
     if (isUser) {
       return { main: message.content, contrarian: "" };
     }
-    return splitMainAndContrarian(message.content);
-  }, [isUser, message.content]);
+    if (message.isStreaming) {
+      return { main: message.content, contrarian: "" };
+    }
+
+    const contrarian = extractContrarian(message.content);
+    const split = splitMainAndContrarian(message.content);
+    return { ...split, contrarian: contrarian || "" };
+  }, [isUser, message.content, message.isStreaming]);
   const mainHtml = useMemo(() => parseMarkdownInline(parsed.main || message.content), [parsed.main, message.content]);
 
   if (isUser) {
