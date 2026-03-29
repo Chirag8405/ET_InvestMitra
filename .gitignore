@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+Architecture.aux
+Architecture.out
+Architecture.tex
+Architecture.log
